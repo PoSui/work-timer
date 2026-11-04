@@ -4,7 +4,7 @@
 
 纯前端单文件，双击 `index.html` 就能用，不装任何东西，数据只存在你自己的浏览器里。
 
-![版本](https://img.shields.io/badge/version-v30.07-blue) ![测试](https://img.shields.io/badge/tests-425%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![版本](https://img.shields.io/badge/version-v30.09-blue) ![测试](https://img.shields.io/badge/tests-437%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -96,6 +96,8 @@ _tests/
 
 | 版本 | 内容 |
 |---|---|
+| v30.09 | 自检收紧（pm P2）：「版本一致」改严格相等（title = brand = README 徽标 = 台账最新行），且 README 版本历史必须含当前版本行；`innerHTML` 从 `ok(true)` 恒绿改为真检查（`+` 拼接含变量且未 `esc/money` 即失败）；新增 `node _tests/selfcheck.js --selftest` 反证模式（临时副本改 id / 改 title 版本 / 删 README 历史行 / 塞未转义 innerHTML，必须抓到 ≥3 条），报告见 `docs/全量自检_v30.09.md` |
+| v30.08 | 收口修复（台账 P3）+ 全量自检：320px 日历金额取整不截断；窗口跨 720px 断点时防抖收起日历（回宽屏不自动展开）；时薪轨迹 X 轴按真实月份差占位；对账代扣拆社保/公积金/个税分项行；新增 `_tests/selfcheck.js` 独立自检（id 完整性/语法/CSS 括号/弹窗白名单/文案洁癖/innerHTML 注入面/四处版本一致/深色对比度/移动几何），报告见 `docs/全量自检_v30.08.md` |
 | v30.07 | 图表标题不再撒谎：`#histTitle` 按实际渲染柱数动态生成（手机「近 N 个月」，N=有数据的月份数 1–3；桌面仍「近 6 个月」），断言「标题月数 === 实际柱数」；数据全 0 时显示「还没有足够数据」且标题保持窗口月数 |
 | v30.06 | UI + 口径修复包（用户手机截图 8 条 + pm 手机端 5 条）：日历 7 列 `minmax(0,1fr)` 不溢出、格子金额缩到 9px 并省略、卡片标题 nowrap 不竖排、设置项标题不折行；手机图表只画最近 3 个月、0 元月不画柱不标金额、全 0 显示「还没有足够数据」、X 轴短标签；去掉时薪轨迹重复的「折叠」按钮；对账三格窄屏单列；「已达成」去掉 🎉；清空数据单独一行放最底且三次确认；手机首屏按钮提到三小卡之前（CSS order），日历卡默认折叠并排到对账之后；口径矛盾修正：满勤应得写明「N 个完整工作日（不含今天）+ 今天进行中」，本期构成标注「含今天进行中 1 天」，两处天数差只能用今天解释 |
 | v30.05 | 删掉「空格 = 开始上班」文字提示（DOM、CSS、媒体查询里一并移除，不是隐藏）：快捷键保留，按空格仍能开始、输入框内仍不触发；手机 `.chips` 改 `repeat(2,minmax(0,1fr))` 与基础规则对齐；移动端规格里的主数字 clamp 回写为实现值 40–72 |

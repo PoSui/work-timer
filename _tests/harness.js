@@ -52,9 +52,13 @@ global.document = {
   title: ""
 };
 global.window = global;
+global.addEventListener = (ev, fn) => { (listeners["__win__"] = listeners["__win__"] || {})[ev] = fn; };
 global.setInterval = (fn, ms) => { const t = { fn, ms, alive: true }; timers.push(t); return t; };
 global.clearInterval = t => { if (t) t.alive = false; };
-global.setTimeout = () => 0;
+let timeouts = [];
+global.setTimeout = (fn, ms) => { const t = { fn, ms: ms || 0, alive: true }; timeouts.push(t); return t; };
+global.clearTimeout = t => { if (t) t.alive = false; };
+function flushTimeouts(){ const due = timeouts.splice(0); due.forEach(t => { if (t.alive) { try { t.fn(); } catch (e) {} } }); }
 global.Blob = class { constructor(parts) { blobs.push(parts.join("")); } };
 global.URL = { createObjectURL: () => "blob:x", revokeObjectURL(){} };
 global.alert = m => alerts.push(String(m));
@@ -74,7 +78,7 @@ let promptCount = 0;
 global.prompt = () => { promptCount++; return (promptQueue.length ? promptQueue.shift() : null); };
 
 function boot() {
-  timers = []; listeners = {}; alerts = []; blobs = []; promptCount = 0;
+  timers = []; listeners = {}; alerts = []; blobs = []; promptCount = 0; timeouts = [];
   Object.keys(nodes).forEach(k => { nodes[k]._html = ""; nodes[k].textContent = ""; nodes[k].style = {}; nodes[k].classList._s.clear(); });
   eval(APP);
 }
@@ -624,8 +628,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.07", "title 是 v30.07（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.07", "brand 是 v30.07（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.09", "title 是 v30.08（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.09", "brand 是 v30.08（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -633,7 +637,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.07 \|/m.test(readmeSrc), "README 版本历史有 v30.07 行");
+ok(/^\| v30\.09 \|/m.test(readmeSrc), "README 版本历史有 v30.09 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1518,6 +1522,70 @@ console.log("\n=== 66. 删掉「空格」文字提示，快捷键仍可用 ===")
   ok(txtOf("histTitle") === "近 6 个月", "桌面标题仍是「近 6 个月」（实际：" + txtOf("histTitle") + "）");
   ok(titleNum68() === barNum68() && barNum68() === 6, "桌面 6 根柱且标题月数 === 柱数");
   narrow68(false);
+})();
+
+
+/* ===== 69 v30.08：A 组 bug 修复（改前必红） ===== */
+(function(){
+  console.log("=== 69. v30.08 A 组修复 ===");
+  function mm69(matchFn){
+    global.window.matchMedia = function(q){ return { matches: !!matchFn(q), media: q, addListener: function(){}, removeListener: function(){}, addEventListener: function(){}, removeEventListener: function(){} }; };
+  }
+  function viewport(px){ mm69(function(q){ var m = q.match(/(\d+)px/); return !!m && +m[1] >= px; }); }
+  var B69 = { salary: 9800, days: 21.75, payDay: 1, restMode: "double", workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00", freq: 1000, theme: "light" };
+  var rec69 = function(){ return { earned: 450.57, earnedMs: 7*3600000, rate: 64.37, endMs: 1, pauses: [] }; };
+
+  /* A1 ≤360px 日历金额取整，不出现省略号截断 */
+  viewport(320); setClock("2026-11-03T10:00:00"); setSetting(B69);
+  setRecs({ "2026-11-02": rec69() }); boot();
+  var cal320 = nodes["calWrap"]._html || "";
+  var mins320 = cal320.match(/class="e">(¥[^<]*)<\/div>/g) || [];
+  ok(mins320.length > 0, "320px 日历仍有金额（" + mins320.length + " 格）");
+  ok(mins320.every(function(x){ return /^class="e">¥\d+<\/div>$/.test(x); }), "320px 金额为整数「¥460」形态（" + mins320.join(",") + "）");
+  viewport(375); boot();
+  var cal375 = nodes["calWrap"]._html || "";
+  ok(/class="e">¥\d+\.\d{2}<\/div>/.test(cal375), "375px 金额仍保留两位小数");
+
+  /* A2 resize 跨断点：375 收起日历；回 1200 不自动展开 */
+  viewport(1200); setClock("2026-11-03T10:00:00"); setSetting(B69); setRecs({}); boot();
+  nodes["calBox"].open = true;
+  viewport(375);
+  var rl = listeners["__win__"] && listeners["__win__"].resize;
+  ok(!!rl, "注册了 window resize 监听");
+  if(rl){ rl({}); flushTimeouts(); }
+  ok(nodes["calBox"].open === false, "resize 到 375 后日历自动收起");
+  viewport(1200);
+  if(rl){ rl({}); flushTimeouts(); }
+  ok(nodes["calBox"].open === false, "resize 回 1200 不自动展开（避免抖动）");
+
+  /* A3 时薪轨迹 X 轴按真实月份差 */
+  viewport(1200);
+  store["niuma.phases.v1"] = JSON.stringify([
+    { from: "2024-01", salary: 5000, days: 21.75, hours: 8 },
+    { from: "2024-02", salary: 5000, days: 21.75, hours: 8 },
+    { from: "2026-11", salary: 9800, days: 21.75, hours: 8 }
+  ]);
+  setClock("2026-11-03T10:00:00"); setSetting(B69); setRecs({}); boot();
+  var phHtml = nodes["phaseBody"]._html || "";
+  var cxs = (phHtml.match(/class="ph-dot" cx="([\d.]+)"/g) || []).map(function(x){ return parseFloat(x.split('cx="')[1]); });
+  ok(cxs.length === 3, "轨迹图有 3 个点");
+  var mid = cxs[0] + (cxs[2] - cxs[0]) / 34;
+  ok(Math.abs(cxs[1] - mid) < 1.5, "第二点 X ≈ 首末距离的 1/34（实际 " + (cxs[1] ? cxs[1].toFixed(1) : "?") + " vs " + mid.toFixed(1) + "）");
+  delete store["niuma.phases.v1"];
+
+  /* A4 对账代扣分项：社保/公积金/个税各一行 + 合计 */
+  setClock("2026-11-03T10:00:00"); setSetting(B69); setRecs({}); boot();
+  click("btnActFill");
+  nodes["actAmount"].value = "5000";
+  nodes["actSocial"].value = "600";
+  nodes["actHousing"].value = "400";
+  nodes["actTax"].value = "30";
+  click("btnActSave");
+  var attr69 = nodes["resAttr"]._html || "";
+  ok(/社保[^<]*<b>−¥600\.00<\/b>/.test(attr69), "社保单列 ¥600.00");
+  ok(/公积金[^<]*<b>−¥400\.00<\/b>/.test(attr69), "公积金单列 ¥400.00");
+  ok(/个税[^<]*<b>−¥30\.00<\/b>/.test(attr69), "个税单列 ¥30.00");
+  ok(/代扣合计[^<]*<b>−¥1030\.00<\/b>/.test(attr69), "代扣合计 = 600+400+30 = ¥1030.00");
 })();
 
 console.log("");

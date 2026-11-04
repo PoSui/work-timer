@@ -551,7 +551,15 @@
     }).join("");
     html+='<div class="act-arow act-conv">差额基准：满勤应得 '+money(rec.estimate)+'（当月 '+at.workdays+' 个工作日 × 日薪 '+money(payShown)+'）；病假/休息/加班是相对满勤的增减。</div>';
     if(legacy) html+='<div class="act-arow act-conv">旧数据无快照，按当前口径重算（改过月薪/作息的话，数字可能与当初不同）。</div>';
-    if(ded>0) html+='<div class="act-arow act-conv">已填社保/公积金/个税共 '+money(ded)+'，扣后应约 '+money(expectedNet)+'；与实发相差 '+signedMoney(rec.actual-expectedNet)+'。</div>';
+    if(ded>0){
+      var dd=rec.deductions||{}, dparts=[["social","社保"],["housing","公积金"],["tax","个税"]];
+      dparts.forEach(function(pp){
+        var dv=+dd[pp[0]]||0;
+        if(dv>0) html+='<div class="act-arow act-ded">'+pp[1]+' <b>−'+money(dv)+'</b></div>';
+      });
+      html+='<div class="act-arow act-ded">代扣合计 <b>−'+money(ded)+'</b></div>';
+      html+='<div class="act-arow act-conv">已填社保/公积金/个税共 '+money(ded)+'，扣后应约 '+money(expectedNet)+'；与实发相差 '+signedMoney(rec.actual-expectedNet)+'。</div>';
+    }
     var attr=document.getElementById("resAttr"); if(attr) attr.innerHTML=html;
 
     // v30：先扣掉用户自己填的代扣再判断，避免「代扣很高」被误报成「只发了一部分」
@@ -801,7 +809,10 @@
     PHASES.forEach(function(p){ var h=hourlyOfPhase(p); hs.push(h); if(h<minH)minH=h; if(h>maxH)maxH=h; });
     if(n===0) return "";
     var padL=14, padR=52, x0=padL, x1=W-padR, y0=14, y1=H-24, span=(maxH-minH)||1;
-    function X(i){ return n===1?((x0+x1)/2):(x0+(x1-x0)*i/(n-1)); }
+    // v30.08：X 按真实月份差占位，间隔 6 个月和 1 个月不能画成一样宽
+    var mis=PHASES.map(function(p){ return monthIdx(p.from); });
+    var miMin=Math.min.apply(null,mis), miMax=Math.max.apply(null,mis), miSpan=(miMax-miMin)||1;
+    function X(i){ return n===1?((x0+x1)/2):(x0+(x1-x0)*(mis[i]-miMin)/miSpan); }
     function Y(h){ return y1-(h-minH)/span*(y1-y0); }
     var pts=hs.map(function(h,i){ return X(i).toFixed(1)+","+Y(h).toFixed(1); }).join(" ");
     var g='<svg class="ph-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="时薪轨迹折线图">';
@@ -916,10 +927,11 @@
     box.innerHTML=html+'<p class="gsub">合计 '+money(total)+' · '+(todayIn?"含今天进行中 1 天 · ":"")+'本期末次更新 '+new Date(now).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+'</p>';
   }
   // v30.06：窄屏（≤720px）图表只画最近 3 个月、0 值月份不画柱，避免 5 个 ¥0.00 堆叠
-  function narrowViewport(){
-    try{ return !!(window.matchMedia && window.matchMedia("(max-width:720px)").matches); }
+  function narrowAt(px){
+    try{ return !!(window.matchMedia && window.matchMedia("(max-width:"+px+"px)").matches); }
     catch(e){ return false; }
   }
+  function narrowViewport(){ return narrowAt(720); }
   function renderHistory(now){
     var box=document.getElementById("histBody"); if(!box) return;
     var narrow=narrowViewport(), mc=narrow?3:6;
@@ -1119,7 +1131,8 @@
       var live=afterClear(k), r0=R[k];
       if(inP&&live&&k<=tk){
         var v=dayValue(k,now);
-        if(v>0||k===tk) amt=money(v);
+        // v30.08：≤360px 格子太窄，金额取整显示（¥460），不靠省略号截断
+        if(v>0||k===tk) amt=narrowAt(360)?("¥"+Math.round(v)):money(v);
         if(r0&&r0.type){
           ttl={off:"休",paid:"带薪",sick:"病假",p80:"80%",ot:"加班"}[r0.type]||"";
           if(r0.type==="ot"&&r0.mul) ttl="加班"+r0.mul+"x";
@@ -1522,6 +1535,21 @@
     if(b){b.style.display="block";b.textContent="页面出错（把这段话发给我）："+msg+" @"+line;}
     return false;
   };
+  // v30.08：窗口跨过 720px 断点时处理日历折叠（防抖 200ms，回宽屏不自动展开，避免来回抖动）
+  var resizeTimer=null, wasNarrow=narrowViewport();
+  try{
+    if(window.addEventListener){
+      window.addEventListener("resize",function(){
+        if(resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer=setTimeout(function(){
+          var nowNarrow=narrowViewport();
+          if(nowNarrow===wasNarrow) return;
+          wasNarrow=nowNarrow;
+          if(nowNarrow){ var cb=document.getElementById("calBox"); if(cb) cb.open=false; }
+        },200);
+      });
+    }
+  }catch(e){}
   finalizeStale();
   loadMeta(); fillForm(); ensurePhase(); render(); renderTables(); renderCalendar();
   try{ if(narrowViewport()){ var calBox=document.getElementById("calBox"); if(calBox) calBox.open=false; } }catch(e){}

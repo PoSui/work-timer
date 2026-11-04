@@ -622,9 +622,321 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v26.03", "title 是 v26.03（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v26.03", "brand 是 v26.03（实际：" + vBrand + "）");
-ok(/^\| v26\.03 \|/m.test(readmeSrc), "README 版本历史有 v26.03 行");
+ok(vTitle === "牛马计时器 v28.02", "title 是 v28.02（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v28.02", "brand 是 v28.02（实际：" + vBrand + "）");
+ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
+ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
+ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
+ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
+
+
+/* ===== v27 月末对账 ===== */
+const KEY_ACT = "niuma.actuals.v1";
+const SET27 = {salary:9800, days:21.75, workStart:"08:30", workEnd:"18:00", breakStart:"11:30", breakEnd:"14:00", freq:1000};
+function fresh27(records){
+  store = {}; setSetting(SET27);
+  if(records) store[KEY_REC] = JSON.stringify(records);
+  boot();
+}
+function actFill(amount){
+  click("btnActFill");
+  nodes["actAmount"].value = String(amount);
+  click("btnActSave");
+}
+function actList(){ return JSON.parse(store[KEY_ACT] || "[]"); }
+
+/* 50 差值与百分比 */
+console.log("\n=== 50. 对账：差值与百分比 ===");
+fresh27(null);
+ok(htmlSrc.indexOf('id="actualCard"') > htmlSrc.indexOf('id="statCard"') &&
+   htmlSrc.indexOf('id="actualCard"') < htmlSrc.indexOf('id="histCard"'),
+   "对账卡片放在「本期构成」之后、「近 6 个月」之前");
+ok(nodes["actualBody"].innerHTML.indexOf("填入实际") >= 0, "未对账时卡片有「填入实际」");
+click("btnActFill");
+ok(nodes["actualModal"].classList.contains("show"), "点「填入实际」弹出对账浮层（非 prompt）");
+nodes["actAmount"].value = "5000";
+click("btnActSave");
+var A = actList();
+ok(A.length === 1, "保存后 localStorage 写入 1 条（实际 " + A.length + "）");
+var actRec0 = A[0] || {diff: NaN, actual: NaN, estimate: NaN, diffPct: NaN};
+ok(Math.abs(actRec0.diff - (actRec0.actual - actRec0.estimate)) < 0.01, "diff = actual - estimate");
+ok(Math.abs(actRec0.diffPct - (actRec0.diff / actRec0.estimate * 100)) < 0.02, "diffPct 与 diff/estimate 一致");
+ok(actRec0.diff < 0, "负数差额正确（" + actRec0.diff + "）");
+ok(nodes["actFormView"].style.display === "none" && nodes["actResultView"].style.display !== "none",
+   "保存后同浮层切到结果视图");
+click("btnActDone");
+click("btnActEdit");
+nodes["actAmount"].value = "0";
+click("btnActSave");
+A = actList();
+ok(A.length === 1 && A[0].actual === 0, "actual=0 也可保存（覆盖同一账期）");
+var actRec1 = A[0] || {diff: NaN, estimate: NaN, diffPct: NaN};
+near(actRec1.diff, -actRec1.estimate, 0.01, "actual=0 时 diff = -estimate");
+near(actRec1.diffPct, -100, 0.01, "actual=0 时 diffPct = -100");
+
+/* 51 差异归因 */
+console.log("\n=== 51. 对账：差异归因与排序 ===");
+fresh27({"2026-10-20":{type:"sick"}, "2026-10-21":{type:"off"},
+         "2026-10-23":{type:"ot", mul:2}});
+ok(nodes["actualCard"] && true, "含特殊记录时卡片仍在");
+actFill(5000);
+var attr = nodes["resAttr"].innerHTML;
+ok(attr.indexOf("病假 1 天") >= 0 && attr.indexOf("60%") >= 0, "病假条目（60%）");
+ok(attr.indexOf("休息 1 天") >= 0, "休息条目");
+ok(attr.indexOf("加班 1 天") >= 0, "加班条目（含倍率）");
+ok(attr.indexOf("差额基准") >= 0 && attr.indexOf("满勤应得") >= 0, "写明差额基准 = 满勤应得");
+ok(attr.indexOf("180.23") >= 0, "病假影响 = -0.4×日薪 = 180.23（实际：" + attr.replace(/<[^>]+>/g, "").slice(0, 200) + "）");
+ok(attr.indexOf("休息 1 天") < attr.indexOf("加班 1 天") && attr.indexOf("加班 1 天") < attr.indexOf("病假 1 天"),
+   "按影响金额排序（休息/加班 450.57 > 病假 180.23）");
+ok(txtOf("resConcl").indexOf("差额主要来自") >= 0, "结论句「差额主要来自…」");
+ok(txtOf("resConcl").indexOf("抵消") >= 0 || txtOf("resConcl").indexOf("病假") >= 0, "结论句写净贡献/抵消");
+/* 51b 带薪假：影响为 0，单独一账期验证仍展示该条目 */
+fresh27({"2026-10-22":{type:"paid"}});
+actFill(5000);
+var attrP = nodes["resAttr"].innerHTML;
+ok(attrP.indexOf("带薪假 1 天") >= 0, "带薪假条目（100% 计，影响 ¥0.00）");
+ok(attrP.indexOf("¥0.00") >= 0, "带薪假影响金额显示 ¥0.00");
+
+/* 52 无异常：只出折算说明 */
+console.log("\n=== 52. 对账：无异常只出折算说明 ===");
+fresh27(null);
+actFill(5000);
+var attr2 = nodes["resAttr"].innerHTML;
+ok(attr2.indexOf("差额基准") >= 0 && attr2.indexOf("满勤应得") >= 0, "有满勤应得基准说明");
+ok(attr2.indexOf("天病假") < 0 && attr2.indexOf("天加班") < 0 && attr2.indexOf("天休息") < 0,
+   "无异常记录时不出现病假/加班/休息归因行");
+ok(txtOf("resConcl").indexOf("暂未归类") >= 0, "结论：把差额写成暂未归类，而不是折算偏差");
+
+/* 53 落盘 + IDB 快照 */
+console.log("\n=== 53. 对账：localStorage 与 IDB 快照 ===");
+fresh27(null); actFill(5412.68);
+var B = actList();
+ok(B.length === 1 && B[0].periodKey && B[0].at > 0, "记录含 periodKey 与 at");
+var snap = window.__niuma.IDB.snapshot();
+ok(Array.isArray(snap.actuals) && snap.actuals.length === 1, "IDB 快照含 actuals（实际 " + (snap.actuals ? snap.actuals.length : "无") + "）");
+ok(snap.actuals[0].actual === 5412.68, "IDB 快照数值正确");
+
+/* 54 历史：最多 6 条、倒序、平均绝对偏差 */
+console.log("\n=== 54. 对账历史 ===");
+fresh27(null); actFill(4000);
+var curKey = (actList()[0] || {}).periodKey || "";
+var extra = [];
+for (var hi = 0; hi < 7; hi++) {
+  extra.push({periodKey: "2025-0" + (hi + 1) + "-01~2025-0" + (hi + 1) + "-28",
+              estimate: 5000, actual: 5000 + hi * 10, diff: hi * 10, diffPct: hi * 0.2, at: 1000 + hi});
+}
+store[KEY_ACT] = JSON.stringify(extra.concat(actList()));
+boot();
+click("btnActHist");
+var histHtml = nodes["histActBody"].innerHTML;
+ok((histHtml.match(/act-hrow/g) || []).length === 6, "历史最多显示 6 条（实际 " + (histHtml.match(/act-hrow/g) || []).length + "）");
+ok(histHtml.indexOf("2025-07-01~2025-07-28") < histHtml.indexOf("2025-06-01~2025-06-28"), "按时间倒序");
+ok(txtOf("histActSum").indexOf("平均绝对偏差") >= 0, "汇总含「平均绝对偏差」");
+ok(nodes["actHistView"].style.display !== "none", "「看历史」切到历史视图");
+
+/* 55 同账期覆盖不新增 */
+console.log("\n=== 55. 同账期覆盖 ===");
+fresh27(null); actFill(5412); click("btnActDone"); click("btnActEdit"); nodes["actAmount"].value = "6000"; click("btnActSave");
+var C = actList();
+ok(C.length === 1, "同账期再存是覆盖，不新增（实际 " + C.length + " 条）");
+ok((C[0] || {}).actual === 6000, "覆盖后 actual=6000");
+
+function firstMoney(id){ var m = txtOf(id).match(/¥([\d,]+\.\d{2})/); return m ? parseFloat(m[1].replace(/,/g, "")) : 0; }
+/* ===== v28.01 对账归因修复（pm task-10） ===== */
+console.log("\n=== 58. v28.01 对账归因：同基、净贡献、残差量级 ===");
+// 58a：diff = 0（实际 = 满勤应得），但记了 sick+off+ot → 不得出现「主要来自」
+setClock("2026-11-03T15:45:00");
+fresh27({"2026-10-20":{type:"sick"}, "2026-10-21":{type:"off"}, "2026-10-23":{type:"ot", mul:2}});
+var est58 = firstMoney("actualBody");
+actFill(est58);
+var c58a = txtOf("resConcl");
+ok(Math.abs(actList()[0].diff) < 0.01, "58a diff = 0（实际 " + actList()[0].diff + "）");
+ok(c58a.indexOf("主要来自") < 0, "58a diff=0 时不得出现「主要来自」（实际：" + c58a + "）");
+ok(c58a.indexOf("折算偏差") < 0 && c58a.indexOf("几十元") < 0, "58a 不再用「折算偏差/几十元」措辞");
+ok(c58a.indexOf("基本一致") >= 0, "58a 结论是「基本一致」");
+
+// 58b：休息与加班抵消，净差来自病假
+setClock("2026-11-03T15:45:00");
+fresh27({"2026-10-20":{type:"sick"}, "2026-10-21":{type:"off"}, "2026-10-23":{type:"ot", mul:2}});
+actFill(firstMoney("actualBody") - 180.23);
+var c58b = txtOf("resConcl"), a58b = nodes["resAttr"].innerHTML;
+ok(Math.abs(actList()[0].diff - (-180.23)) < 0.02, "58b 差额 = -180.23（实际 " + actList()[0].diff + "）");
+ok(c58b.indexOf("抵消") >= 0, "58b 抵消项合并成「基本抵消」（实际：" + c58b + "）");
+ok(c58b.indexOf("病假") >= 0, "58b 净贡献只剩病假");
+ok(a58b.indexOf("满勤应得") >= 0 && a58b.indexOf("差额基准") >= 0, "58b 归因写明基准是满勤应得");
+ok(a58b.indexOf("几十元") < 0, "58b 归因不再写「几十元」");
+
+// 58c：只记病假、实际少 1500 → 残差大额要有量级提示，不能叫「折算偏差」
+setClock("2026-11-03T15:45:00");
+fresh27({"2026-10-20":{type:"sick"}});
+actFill(firstMoney("actualBody") - 1500);
+var c58c = txtOf("resConcl");
+ok(Math.abs(actList()[0].diff - (-1500)) < 0.02, "58c 差额 = -1500（实际 " + actList()[0].diff + "）");
+ok(c58c.indexOf("暂未归类") >= 0, "58c 大额残差写成「暂未归类」");
+ok(c58c.indexOf("社保") >= 0 && c58c.indexOf("个税") >= 0, "58c 大额残差提示社保/个税可能");
+ok(c58c.indexOf("折算偏差") < 0, "58c 不再把残差叫「折算偏差」");
+
+// 58d：改月薪后再点「修改」保存，不得改写 estimate 快照（pm 实测 5406.90 → 11034.48）
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27(null);
+actFill(5412.68);
+var est58 = actList()[0].estimate;
+setSetting({salary:20000});
+nodes["iSalary"].value = "20000";
+click("btnSave");
+click("btnActEdit");
+nodes["actAmount"].value = "5412.68";
+click("btnActSave");
+ok(Math.abs(actList()[0].estimate - est58) < 0.01, "58d 改月薪后编辑保存，estimate 仍是快照（" + est58 + " → " + actList()[0].estimate + "）");
+ok(nodes["actualBody"].innerHTML.indexOf(Number(est58).toFixed(2)) >= 0, "58d 卡片仍显示快照的满勤应得");
+
+// 58e：填错大额（999999）要有提醒，不能只甩一个巨大偏差率
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27(null);
+actFill(999999);
+var w58 = txtOf("actWarn");
+ok(nodes["actWarn"].style.display !== "none" && w58.length > 0, "58e 大额实发出现提醒");
+ok(w58.indexOf("多打了一位") >= 0, "58e 提醒里写明可能是多打一位");
+
+// 58f：填了代扣 → 扣后与实发比较，结论写明「− 已填代扣」
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27(null);
+click("btnActFill");
+nodes["actAmount"].value = "4406.9";
+nodes["actSocial"].value = "1000";
+click("btnActSave");
+var c58f = txtOf("resConcl"), a58f = nodes["resAttr"].innerHTML;
+ok(c58f.indexOf("已填代扣") >= 0 && c58f.indexOf("基本一致") >= 0, "58f 代扣参与解释（实际：" + c58f + "）");
+ok(a58f.indexOf("扣后应约") >= 0, "58f 结果里写出扣后应约金额");
+
+// 58g：卡片基准改叫「满勤应得」，不再跟「本期已赚」混口径
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27(null);
+ok(nodes["actualBody"].innerHTML.indexOf("满勤应得") >= 0, "58g 对账卡写「满勤应得」");
+ok(nodes["actualBody"].innerHTML.indexOf("个工作日 × 日薪") >= 0, "58g 对账卡给出工作日数 × 日薪的算式");
+
+/* ===== v28 口径可追溯（三个可点数字 → 底部抽屉） ===== */
+console.log("\n=== 57. 口径抽屉（结论→算式→说明） ===");
+ok(/class="hit" id="hitToday"/.test(htmlSrc), "今天已赚包了可点容器 .hit");
+ok(/id="hitToday"[^>]*role="button"/.test(htmlSrc), "今天已赚 role=button");
+ok(/id="chipRate"[^>]*role="button"/.test(htmlSrc), "时薪卡 role=button");
+ok(/id="chipMonth"[^>]*role="button"/.test(htmlSrc), "本期已赚 role=button");
+ok(/class="qmark"/.test(htmlSrc), "三个数字都有极小 ? 标");
+ok(/#sheet\{[^}]*translateY\(105%\)/.test(htmlSrc), "抽屉默认收起（transform 105%）");
+ok(/id="sheet"[^>]*role="dialog"/.test(htmlSrc), "抽屉 role=dialog aria-modal");
+ok(htmlSrc.indexOf('id="sheetMask"') < htmlSrc.indexOf("<script>"), "抽屉 DOM 在脚本之前（脚本执行时能取到节点）");
+ok(htmlSrc.indexOf('id="hitToday"') < htmlSrc.indexOf("<script>"), "可点数字 DOM 在脚本之前");
+
+// 同一假时钟：09:00 开始 → 15:45 打开抽屉，抽屉数字必须 === 主界面数字
+setClock("2026-11-03T15:45:00");
+fresh27();
+click("btnStart");
+const mainToday = moneyOf("todayEarn");
+click("hitToday");
+ok(nodes["sheet"].classList.contains("show"), "点「今天已赚」→ 抽屉打开");
+const tBody = txtOf("sheetBody");
+ok(tBody.indexOf("时薪") >= 0 && tBody.indexOf("有效工时") >= 0, "今天抽屉有三段式算式（时薪 × 有效工时 = 金额）");
+ok(tBody.indexOf("上班 08:30") >= 0, "今天抽屉写出上班时间");
+ok(tBody.indexOf("现在 15:45") >= 0, "今天抽屉写到「现在 15:45」");
+ok(tBody.indexOf(mainToday.toFixed(2)) >= 0, "今天抽屉数字 === 主界面（" + mainToday.toFixed(2) + "）");
+click("hitToday");
+ok(!nodes["sheet"].classList.contains("show"), "再点同一个数字可关");
+
+click("chipRate");
+ok(nodes["sheet"].classList.contains("show"), "点「时薪卡」→ 抽屉打开");
+const rBody = txtOf("sheetBody"), mainRate = moneyOf("rateTxt");
+ok(rBody.indexOf("21.75") >= 0, "时薪抽屉写明 21.75");
+ok(rBody.indexOf("(365−104)/12") >= 0, "时薪抽屉解释 21.75 = (365−104)/12");
+ok(rBody.indexOf("不含个税与社保") >= 0, "时薪抽屉写明不含个税与社保");
+ok(rBody.indexOf("月末对账") >= 0, "时薪抽屉提示可在月末对账校准");
+ok(rBody.indexOf(mainRate.toFixed(2)) >= 0, "时薪抽屉数字 === 主界面（" + mainRate.toFixed(2) + "）");
+click("sheetClose");
+ok(!nodes["sheet"].classList.contains("show") && !nodes["sheetMask"].classList.contains("show"), "关闭按钮关掉且遮罩无残留");
+
+click("chipMonth");
+const pBody = txtOf("sheetBody"), mainMonth = moneyOf("monthEarn");
+ok(pBody.indexOf("账期") >= 0 && pBody.indexOf("工作日") >= 0, "本期抽屉含账期与工作日数");
+ok(pBody.indexOf("其中：") >= 0, "本期抽屉按类型分组（正常/病假/休息/加班）");
+ok(pBody.indexOf(mainMonth.toFixed(2)) >= 0, "本期抽屉数字 === 主界面（" + mainMonth.toFixed(2) + "）");
+if (listeners["__doc__"] && listeners["__doc__"].keydown) listeners["__doc__"].keydown({code:"Escape", target:{tagName:"BODY"}, preventDefault(){}});
+ok(!nodes["sheet"].classList.contains("show") && !nodes["sheetMask"].classList.contains("show"), "Esc 可关且遮罩无残留");
+click("hitToday");
+if (listeners["sheetMask"] && listeners["sheetMask"].click) listeners["sheetMask"].click({target:nodes["sheetMask"], preventDefault(){}});
+ok(!nodes["sheet"].classList.contains("show") && !nodes["sheetMask"].classList.contains("show"), "点遮罩可关且无残留");
+
+// 今天还没开始计时：抽屉给「还没开始计时」而不是空白
+fresh27();
+click("hitToday");
+ok(txtOf("sheetBody").indexOf("还没开始计时") >= 0, "今天未开始时抽屉提示「还没开始计时」");
+ok(txtOf("sheetBody").indexOf("不含个税与社保") >= 0, "今天未开始时说明文案仍在");
+click("sheetClose");
+
+// 未设置月薪时也不崩：抽屉照开，说明文案仍在
+store = {}; boot();
+click("chipRate");
+ok(nodes["sheet"].classList.contains("show"), "未设置月薪也能开抽屉（不崩）");
+ok(txtOf("sheetBody").indexOf("不含个税与社保") >= 0, "未设置月薪时说明文案仍在");
+
+/* 56 估算快照固化 */
+console.log("\n=== 56. 估算快照固化 ===");
+fresh27(null); actFill(5412.68);
+var estBefore = (actList()[0] || {}).estimate || 0;
+setSetting({salary:20000});
+nodes["iSalary"].value = "20000";
+click("btnSave");
+var estAfter = (actList()[0] || {}).estimate || 0;
+near(estAfter, estBefore, 0.001, "改月薪后已保存的 estimate 不变");
+ok(nodes["actualBody"].innerHTML.indexOf(Number(estBefore).toFixed(2)) >= 0, "卡片仍显示快照估算值");
+
+
+/* ===== v28.02 对账归因快照化 ===== */
+console.log("\n=== 59. 对账归因快照化（改月薪不改旧账说法）===");
+fresh27(null);
+actFill(5000);
+var R0 = actList()[0];
+ok(Array.isArray(R0.impactSnapshot), "保存时写入 impactSnapshot 数组");
+ok(R0.basis === "full-attendance", "basis 记录为 full-attendance（实际 " + R0.basis + "）");
+ok(typeof R0.dailyPaySnapshot === "number" && R0.dailyPaySnapshot > 0, "dailyPaySnapshot 是正数（实际 " + R0.dailyPaySnapshot + "）");
+ok(typeof R0.paidDaysSnapshot === "number" && R0.paidDaysSnapshot > 0, "paidDaysSnapshot 是正整数（实际 " + R0.paidDaysSnapshot + "）");
+var attrBefore = nodes["resAttr"].innerHTML;
+var conclBefore = txtOf("resConcl");
+var estBefore = R0.estimate;
+
+setSetting(Object.assign({}, SET27, {salary: 15000}));
+boot();
+click("btnActHist");
+click("histRow0");
+ok(nodes["resAttr"].innerHTML === attrBefore, "改月薪 9800→15000 后重开旧账，归因明细逐字不变");
+ok(txtOf("resConcl") === conclBefore, "结论文案逐字不变");
+ok(actList()[0].estimate === estBefore, "estimate 快照不变（实际 " + actList()[0].estimate + "）");
+ok(nodes["resAttr"].innerHTML.indexOf("旧数据无快照") < 0, "有快照的记录不出现「旧数据无快照」");
+
+/* 老数据（v28.01 之前，无快照）降级：按当前口径算 + 明确标注 */
+fresh27(null);
+actFill(5000);
+var L0 = JSON.parse(JSON.stringify(actList()[0]));
+delete L0.impactSnapshot; delete L0.basis; delete L0.dailyPaySnapshot; delete L0.paidDaysSnapshot;
+store[KEY_ACT] = JSON.stringify([L0]);
+boot();
+click("btnActHist");
+click("histRow0");
+ok(nodes["resAttr"].innerHTML.indexOf("旧数据无快照") >= 0, "老数据（无快照）从历史点开显示降级说明");
+ok(nodes["resAttr"].innerHTML.indexOf("按当前口径重算") >= 0, "降级说明写明「按当前口径重算」");
+ok(actList()[0].impactSnapshot === undefined, "只是打开查看，不会把快照补写回老记录");
+
+/* 用户再次保存老记录时补写快照（之后说法即固定） */
+click("btnActEdit");
+nodes["actAmount"].value = "5000";
+click("btnActSave");
+ok(Array.isArray(actList()[0].impactSnapshot), "再次保存老记录时补写快照（之后说法固定）");
+ok(actList()[0].basis === "full-attendance", "补写的 basis 正确");
+var afterUpgrade = JSON.stringify(actList()[0].impactSnapshot);
+setSetting(Object.assign({}, SET27, {salary: 20000}));
+boot();
+click("btnActHist");
+click("histRow0");
+ok(JSON.stringify(actList()[0].impactSnapshot) === afterUpgrade, "升级后的快照再改月薪也不变");
+ok(nodes["resAttr"].innerHTML.indexOf("旧数据无快照") < 0, "升级后不再显示降级说明");
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

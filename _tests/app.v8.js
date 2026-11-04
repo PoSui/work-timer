@@ -2,13 +2,17 @@
   "use strict";
 
   /* ============ 常量与存储 ============ */
-  var LS_SET="niuma.settings.v8", LS_REC="niuma.records.v8", LS_GOALS="niuma.goals.v15";
+  var LS_SET="niuma.settings.v8", LS_REC="niuma.records.v8", LS_GOALS="niuma.goals.v15", LS_ACT="niuma.actuals.v1";
   var DEFAULT={salary:0,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
     workStart:"09:00",workEnd:"18:00",breakStart:"12:00",breakEnd:"13:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
 
+  function loadActuals(){ try{ var a=JSON.parse(localStorage.getItem(LS_ACT)||"[]"); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
+  function saveActuals(){ try{ localStorage.setItem(LS_ACT,JSON.stringify(ACTUALS)); }catch(e){} touchStore(); }
+
   var S=loadSettings(), R=loadRecords();
   var GOALS=loadGoals();
-  var rateView=0, curDay=todayKey(), fastTimer=null, uiTimer=null;
+  var ACTUALS=loadActuals();
+  var curDay=todayKey(), fastTimer=null, uiTimer=null;
 
   function pad(n){return n<10?"0"+n:""+n;}
   function dateKey(d){return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());}
@@ -68,17 +72,18 @@
   function ended(){var r=todayRec();return !!(r&&r.endMs);}
   function isPaused(){var r=todayRec();return !!(r&&r.pauseStartMs);}
 
-  // 某天已工作时长（毫秒）：总时长 − 午休重叠 − 午休之外的暂停
-  function workMsOf(k,now){
-    var r=R[k]; if(!r) return 0;
-    if(r.manual&&!r.startMs) return r.earnedMs||0;
-    if(!r.startMs) return 0;
+  // 某天工时拆解：总时长 / 午休 / 暂停 / 有效。workMsOf 与「今天已赚」抽屉共用这一份
+  function workSplit(k,now){
+    var zero={from:0,to:0,total:0,lunch:0,pauses:0,eff:0};
+    var r=R[k]; if(!r) return zero;
+    if(r.manual&&!r.startMs){ var m=zero; m.eff=r.earnedMs||0; m.manual=true; return m; }
+    if(!r.startMs) return zero;
     var day=dateOfKey(k);
     var bS=atTime(day,S.breakStart).getTime(), bE=atTime(day,S.breakEnd).getTime();
     if(hm2min(S.workEnd)<=hm2min(S.workStart) && bE<=r.startMs){ bS+=86400000; bE+=86400000; }  // 夜班：午休/夜宵落在次日
     var to=r.endMs?r.endMs:Math.min(now,Date.now());
     var from=r.startMs;
-    if(to<=from) return 0;
+    if(to<=from) return zero;
     var total=to-from;
     var lunch=overlap(from,to,bS,bE);
     var pauses=0;
@@ -88,8 +93,9 @@
       pauses+=(pe-ps)-overlap(ps,pe,bS,bE);
     });
     if(r.pauseStartMs){ var ps2=r.pauseStartMs, pe2=to; if(pe2>ps2) pauses+=(pe2-ps2)-overlap(ps2,pe2,bS,bE); }
-    return Math.max(0,total-lunch-pauses);
+    return {from:from,to:to,total:total,lunch:lunch,pauses:pauses,eff:Math.max(0,total-lunch-pauses)};
   }
+  function workMsOf(k,now){ return workSplit(k,now).eff; }
   function earnFrom(ms,rate){return ms/3600000*(rate||0);}
 
   // 某天该显示多少钱：存档/补录/已下班 → 用存档值；只有"计时中"用实时
@@ -232,7 +238,7 @@
         tx.onabort=function(){ rej(tx.error||new Error("idb-abort")); };
       });});
     }
-    function snapshot(){ return {at:Date.now(),settings:S,records:R,goals:GOALS,meta:META}; }
+    function snapshot(){ return {at:Date.now(),settings:S,records:R,goals:GOALS,meta:META,actuals:ACTUALS}; }
     function persist(){
       if(!has()) return Promise.resolve(false);
       var snap=snapshot();
@@ -251,6 +257,7 @@
         S=Object.assign({},DEFAULT,snap.settings||{});
         R=(snap.records&&typeof snap.records==="object")?snap.records:{};
         GOALS=Array.isArray(snap.goals)?snap.goals:[];
+        ACTUALS=Array.isArray(snap.actuals)?snap.actuals:[];
         META=snap.meta||{};
         return true;
       }catch(e){ return false; }
@@ -299,6 +306,262 @@
     return {total:sum,days:days,keys:keys};
   }
 
+  /* ============ v27 月末对账 ============ */
+  function findActual(key){
+    for(var i=0;i<ACTUALS.length;i++) if(ACTUALS[i]&&ACTUALS[i].periodKey===key) return ACTUALS[i];
+    return null;
+  }
+  function periodKeyNow(now){
+    var pr=periodRange(now||Date.now()), endD=new Date(pr.end.getTime()-86400000);
+    return dateKey(pr.start)+"~"+dateKey(endD);
+  }
+  function periodDisplay(now){
+    var pr=periodRange(now||Date.now()), endD=new Date(pr.end.getTime()-86400000);
+    return dateKey(pr.start)+" ~ "+dateKey(endD);
+  }
+  function signedMoney(v){
+    var n=Number(v)||0;
+    return (n<0?"−":"+")+"¥"+Math.abs(n).toFixed(2);
+  }
+  function actualAttribution(now){
+    var tk=todayKey(), pay=dayPayNow(), list=[];
+    var n={sick:0,off:0,paid:0,ot:0,half:0,p80:0}, imp={sick:0,off:0,paid:0,ot:0,half:0,p80:0};
+    var workdays=fullEstimate(now).workdays;
+    periodKeys(now).forEach(function(k){
+      if(k>tk||!afterClear(k)) return;
+      var r=R[k]; if(!r) return;
+      if(r.type==="sick"){ n.sick++; imp.sick-=pay*0.4; }
+      else if(r.type==="off"){ n.off++; imp.off-=pay; }
+      else if(r.type==="paid"){ n.paid++; }
+      else if(r.type==="half"){ n.half++; imp.half-=pay*0.5; }
+      else if(r.type==="p80"){ n.p80++; imp.p80-=pay*0.2; }
+      else if(r.type==="ot"){ n.ot++; imp.ot+=pay*((r.mul||1.5)-1); }
+    });
+    if(n.sick) list.push({key:"sick", label:"病假 "+n.sick+" 天，按 60% 计（相对满勤）", impact:imp.sick, n:n.sick});
+    if(n.off) list.push({key:"off", label:"休息 "+n.off+" 天，不计钱", impact:imp.off, n:n.off});
+    if(n.paid) list.push({key:"paid", label:"带薪假 "+n.paid+" 天，按 100% 计", impact:0, n:n.paid});
+    if(n.half) list.push({key:"half", label:"半天班 "+n.half+" 天，按 50% 计", impact:imp.half, n:n.half});
+    if(n.p80) list.push({key:"p80", label:"出勤 80% "+n.p80+" 天", impact:imp.p80, n:n.p80});
+    if(n.ot) list.push({key:"ot", label:"加班 "+n.ot+" 天（1.5/2/3 倍）", impact:imp.ot, n:n.ot});
+    list.sort(function(a,b){ return Math.abs(b.impact)-Math.abs(a.impact); });
+    return {list:list.slice(0,3), all:list, workdays:workdays};
+  }
+  function renderActual(now){
+    var box=document.getElementById("actualBody"); if(!box) return;
+    now=now||Date.now();
+    var key=periodKeyNow(now), fe=fullEstimate(now), rec=findActual(key), html;
+    if(!rec){
+      html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（'+fe.workdays+' 个工作日 × 日薪 '+money(fe.pay)+'） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
+        '<div class="btns" style="justify-content:flex-start"><button class="b-go" id="btnActFill">填入实际</button></div>';
+    } else {
+      var dcls=rec.diff<0?"#c0392b":"#22a06b";
+      html='<p class="gsub" style="margin:0 0 10px">满勤应得 <b>'+money(rec.estimate)+'</b> · 实际到手 <b>'+money(rec.actual)+
+        '</b> · 差 <b style="color:'+dcls+'">'+signedMoney(rec.diff)+'（'+((rec.diffPct>=0)?"+":"")+Number(rec.diffPct).toFixed(1)+'%）</b></p>'+
+        '<div class="btns" style="justify-content:flex-start"><button class="b-ghost" id="btnActEdit">修改</button><button class="b-ghost" id="btnActHist">看历史</button></div>';
+    }
+    box.innerHTML=html;
+    var f=document.getElementById("btnActFill"), e=document.getElementById("btnActEdit"), h=document.getElementById("btnActHist");
+    if(f) f.addEventListener("click",function(){ openActual(null); });
+    if(e) e.addEventListener("click",function(){ openActual(rec); });
+    if(h) h.addEventListener("click",function(){ showActualHistory(); });
+  }
+  function setActView(which){
+    ["actFormView","actResultView","actHistView"].forEach(function(id){
+      var el=document.getElementById(id); if(el) el.style.display=(id===which?"":"none");
+    });
+  }
+  function showActErr(msg){
+    var el=document.getElementById("actErr");
+    if(el){ el.style.display="block"; el.textContent=msg; }
+  }
+  function openActual(rec){
+    var now=Date.now();
+    var lab=document.getElementById("actPeriodLabel"); if(lab) lab.textContent="账期 "+periodDisplay(now);
+    var a=document.getElementById("actAmount"); if(a) a.value=(rec&&rec.actual!=null)?String(rec.actual):"";
+    [["social","actSocial"],["housing","actHousing"],["tax","actTax"]].forEach(function(x){
+      var el=document.getElementById(x[1]);
+      if(el) el.value=(rec&&rec.deductions&&rec.deductions[x[0]]!=null)?String(rec.deductions[x[0]]):"";
+    });
+    var nt=document.getElementById("actNote"); if(nt) nt.value=(rec&&rec.note)?rec.note:"";
+    var er=document.getElementById("actErr"); if(er){ er.style.display="none"; er.textContent=""; }
+    setActView("actFormView");
+    var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.add("show");
+  }
+  function closeActual(){
+    var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.remove("show");
+    renderActual(Date.now());
+  }
+  function attrLabel(x){
+    if(x.key==="sick") return "病假 "+x.n+" 天，按 60% 计（相对满勤）";
+    if(x.key==="off") return "休息 "+x.n+" 天，不计钱";
+    if(x.key==="paid") return "带薪假 "+x.n+" 天，按 100% 计";
+    if(x.key==="half") return "半天班 "+x.n+" 天，按 50% 计";
+    if(x.key==="p80") return "出勤 80% "+x.n+" 天";
+    return "加班 "+x.n+" 天（1.5/2/3 倍）";
+  }
+  // v28.02：快照 → 归因对象（重开旧账时不再调用 actualAttribution，避免月薪/作息变化改写历史说法）
+  function snapshotToAttr(rec){
+    var all=(rec.impactSnapshot||[]).map(function(x){ return {key:x.type, n:x.days, impact:x.impact}; });
+    all.sort(function(a,b){ return Math.abs(b.impact)-Math.abs(a.impact); });
+    return {all:all, list:all.slice(0,3), workdays:rec.paidDaysSnapshot||0, snap:true};
+  }
+  // 写入时把渲染所需中间量一起固化（basis / 日薪 / 满勤工作日数 / 各类影响）
+  function attributionSnapshot(now){
+    var at=actualAttribution(now), fe=fullEstimate(now);
+    return {
+      impactSnapshot:at.all.map(function(x){ return {type:x.key, days:x.n, impact:+x.impact.toFixed(2)}; }),
+      basis:"full-attendance",
+      dailyPaySnapshot:+fe.pay.toFixed(2),
+      paidDaysSnapshot:fe.workdays
+    };
+  }
+  function saveActualFromForm(){
+    var amt=parseFloat(getVal("actAmount",""));
+    if(!isFinite(amt)||amt<0){ showActErr("请填写实际到手金额（可以填 0）。"); return; }
+    var tmp={}, bad=false;
+    [["social","actSocial"],["housing","actHousing"],["tax","actTax"]].forEach(function(x){
+      var raw=getVal(x[1],"");
+      if(raw==="") return;
+      var f=parseFloat(raw);
+      if(!isFinite(f)||f<0){ bad=true; return; }
+      tmp[x[0]]=+f.toFixed(2);
+    });
+    if(bad){ showActErr("社保/公积金/个税请填非负数字，或留空。"); return; }
+    var now=Date.now(), key=periodKeyNow(now), prev=findActual(key);
+    // v28.01：估算快照固化——同一账期再次「修改」保存时沿用第一次的 estimate，不按新设置的月薪重算
+    var est=(prev&&isFinite(prev.estimate))?prev.estimate:fullEstimate(now).total;
+    var diff=amt-est, pct=est>0?diff/est*100:0;
+    var rec={periodKey:key, estimate:+est.toFixed(2), actual:+amt.toFixed(2), diff:+diff.toFixed(2), diffPct:+pct.toFixed(2)};
+    if(Object.keys(tmp).length) rec.deductions=tmp;
+    rec.note=getVal("actNote","");
+    rec.at=now;
+    // v28.02：写入时快照化——归因结果、基准、日薪、满勤工作日数全部固化，重开只读快照
+    var snap=(prev&&Array.isArray(prev.impactSnapshot))?prev:attributionSnapshot(now);
+    rec.impactSnapshot=snap.impactSnapshot;
+    rec.basis=snap.basis||"full-attendance";
+    rec.dailyPaySnapshot=snap.dailyPaySnapshot;
+    rec.paidDaysSnapshot=snap.paidDaysSnapshot;
+    var replaced=false;
+    for(var i=0;i<ACTUALS.length;i++){ if(ACTUALS[i]&&ACTUALS[i].periodKey===key){ ACTUALS[i]=rec; replaced=true; break; } }
+    if(!replaced) ACTUALS.push(rec);
+    saveActuals(); renderActual(now); showActualResult(rec);
+  }
+
+  function deductionsTotal(rec){
+    var d=(rec&&rec.deductions)||{}, s=0;
+    ["social","housing","tax"].forEach(function(k){ var v=parseFloat(d[k]); if(isFinite(v)&&v>0) s+=v; });
+    return s;
+  }
+  // v28.01：结论只列「净贡献」，diff≈0 时禁止出现「主要来自」；残差按量级说话
+  function actualConclusion(rec, at, baseDiff, residual, ded){
+    var out=[];
+    var lbl=function(x){
+      if(x.key==="sick") return x.n+" 天病假";
+      if(x.key==="off") return x.n+" 天休息";
+      if(x.key==="paid") return x.n+" 天带薪假";
+      if(x.key==="half") return x.n+" 天半天班";
+      if(x.key==="p80") return x.n+" 天出勤 80%";
+      return x.n+" 天加班";
+    };
+    if(Math.abs(baseDiff)<1){
+      if(ded>0) out.push("实发 "+money(rec.actual)+" = 满勤应得 "+money(rec.estimate)+" − 已填代扣 "+money(ded)+"，差 "+signedMoney(baseDiff)+"，基本一致。");
+      else out.push("实发与满勤应得基本一致（差 "+signedMoney(baseDiff)+"），不需要解释差额。");
+    } else {
+      // v28.01：先做正负抵消（休息/加班这类 +450/−450），只把「净贡献」写进结论
+      var work=at.all.filter(function(x){ return Math.abs(x.impact)>=0.005; }).map(function(x){
+        return {key:x.key, n:x.n, impact:x.impact, left:x.impact};
+      });
+      var pos=work.filter(function(x){ return x.left>0; }), neg=work.filter(function(x){ return x.left<0; });
+      var cancelled=[];
+      pos.forEach(function(p){
+        neg.forEach(function(q){
+          if(p.left<0.005||q.left>-0.005) return;
+          var m=Math.min(p.left,-q.left);
+          p.left-=m; q.left+=m;
+        });
+      });
+      work.forEach(function(x){ if(Math.abs(x.left)<0.005 && Math.abs(x.impact)>=0.005) cancelled.push(x); });
+      var remain=work.filter(function(x){ return Math.abs(x.left)>=0.005; })
+                    .sort(function(a,b){ return Math.abs(b.left)-Math.abs(a.left); });
+      var cancelTxt=cancelled.length?("（"+cancelled.map(function(x){ return x.n+" 天"+(x.key==="off"?"休息":x.key==="ot"?"加班":lbl(x).replace(/^\d+ 天/,"")); }).join("、")+"的影响基本抵消）"):"";
+      var deduced=cancelled.reduce(function(a,x){ return a+x.impact; },0);
+      if(remain.length){
+        out.push("差额主要来自 "+remain.slice(0,2).map(function(x){ return lbl(x)+"（"+signedMoney(x.left)+"）"; }).join("、")+(cancelTxt?cancelTxt:"")+"。");
+      } else if(cancelled.length){
+        out.push("休息/加班等的影响基本抵消（净 "+signedMoney(deduced)+"），差额主要来自其他原因。");
+      } else {
+        out.push("没有标记请假或加班，差额可能来自已填/未填的代扣项或估算口径偏差。");
+      }
+    }
+    if(Math.abs(residual)>100){
+      out.push("剩余 "+signedMoney(residual)+" 暂未归类：可能含社保/个税、填错金额、或没标记的请假。");
+    } else if(Math.abs(residual)>=1){
+      out.push("剩余 "+signedMoney(residual)+" 属零头差异。");
+    }
+    return out.join("");
+  }
+  function showActualResult(rec){
+    var now=Date.now(), ded=deductionsTotal(rec);
+    var legacy=!(rec&&rec.basis==="full-attendance"&&Array.isArray(rec.impactSnapshot));
+    // v28.02：有快照就只读快照，绝不重算；老数据（v28.01 之前）降级为按当前口径算并明确标注
+    var at=legacy?actualAttribution(now):snapshotToAttr(rec);
+    var payShown=legacy?dayPayNow():(rec.dailyPaySnapshot||dayPayNow());
+    var sumImp=0;
+    at.all.forEach(function(x){ sumImp+=x.impact; });
+    var expectedNet=rec.estimate-ded;
+    var baseDiff=ded>0?(rec.actual-expectedNet):rec.diff;
+    var residual=baseDiff-sumImp;
+    var html=at.all.slice(0,3).map(function(x){
+      return '<div class="act-arow">'+esc(attrLabel(x))+' <b>'+(x.impact===0?"¥0.00":signedMoney(x.impact))+'</b></div>';
+    }).join("");
+    html+='<div class="act-arow act-conv">差额基准：满勤应得 '+money(rec.estimate)+'（当月 '+at.workdays+' 个工作日 × 日薪 '+money(payShown)+'）；病假/休息/加班是相对满勤的增减。</div>';
+    if(legacy) html+='<div class="act-arow act-conv">旧数据无快照，按当前口径重算（改过月薪/作息的话，数字可能与当初不同）。</div>';
+    if(ded>0) html+='<div class="act-arow act-conv">已填社保/公积金/个税共 '+money(ded)+'，扣后应约 '+money(expectedNet)+'；与实发相差 '+signedMoney(rec.actual-expectedNet)+'。</div>';
+    var attr=document.getElementById("resAttr"); if(attr) attr.innerHTML=html;
+
+    var warn=document.getElementById("actWarn"), warnTxt="";
+    if(rec.estimate>0&&rec.actual>rec.estimate*3){
+      warnTxt="实发 "+money(rec.actual)+" 是满勤应得（"+money(rec.estimate)+"）的 "+Math.round(rec.actual/rec.estimate)+" 倍，偏差 "+Number(rec.diffPct).toFixed(0)+"%。可能多打了一位，建议先核对，确认无误再保存。";
+    } else if(rec.estimate>0&&rec.actual>0&&rec.actual<rec.estimate*0.3){
+      warnTxt="实发 "+money(rec.actual)+" 不到满勤应得（"+money(rec.estimate)+"）的三成，偏差 "+Number(rec.diffPct).toFixed(0)+"%。如果只发了半个月或一部分，可以在备注里写明。";
+    }
+    if(warn){ warn.textContent=warnTxt; warn.style.display=warnTxt?"block":"none"; }
+
+    var se=document.getElementById("resEstimate"); if(se) se.textContent=money(rec.estimate);
+    var sa=document.getElementById("resActual"); if(sa) sa.textContent=money(rec.actual);
+    var sd=document.getElementById("resDiff");
+    if(sd){ sd.textContent=signedMoney(rec.diff); sd.style.color=(rec.diff<0?"#c0392b":"#22a06b"); }
+    var sc=document.getElementById("resConcl"); if(sc) sc.textContent=actualConclusion(rec,at,baseDiff,residual,ded);
+    setActView("actResultView");
+    var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.add("show");
+  }
+  function showActualHistory(){
+    var arr=ACTUALS.slice().sort(function(a,b){ return (b.at||0)-(a.at||0); }).slice(0,6);
+    var html=arr.map(function(r,i){
+      var dcls=r.diff<0?"#c0392b":"#22a06b", d=new Date(r.at||0);
+      return '<div class="act-hrow" id="histRow'+i+'" title="点开看这期的对账结果"><span class="act-hk">'+esc(r.periodKey||"")+'</span>'+
+        '<span class="act-hv">'+money(r.estimate)+' → '+money(r.actual)+'</span>'+
+        '<b style="color:'+dcls+'">'+signedMoney(r.diff)+'</b>'+
+        '<span class="act-hp">'+((r.diffPct>=0)?"+":"")+Number(r.diffPct).toFixed(1)+'%</span>'+
+        '<span class="act-hd">'+pad(d.getMonth()+1)+'-'+pad(d.getDate())+'</span></div>';
+    }).join("")||'<p class="gsub">还没有对账记录。</p>';
+    var box=document.getElementById("histActBody");
+    if(box){
+      box.innerHTML=html;
+      // 每行单独绑，点开看当期结果（v28.02 起结果只读快照，不再重算）
+      arr.forEach(function(r,i){
+        var row=document.getElementById("histRow"+i);
+        if(row) row.addEventListener("click",function(){ showActualResult(r); });
+      });
+    }
+    var mean=0;
+    if(arr.length){ var sum=0; arr.forEach(function(r){ sum+=Math.abs(Number(r.diffPct)||0); }); mean=sum/arr.length; }
+    var sm=document.getElementById("histActSum");
+    if(sm) sm.textContent=arr.length?("最近 "+arr.length+" 次 · 平均绝对偏差 "+mean.toFixed(1)+"%"):"";
+    setActView("actHistView");
+    var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.add("show");
+  }
+
   /* ============ 跨天收尾 ============ */
   function finalizeStale(){
     var tk=todayKey(), changed=false;
@@ -317,11 +580,99 @@
     if(changed) saveRecords();
   }
 
+  /* ============ v28 口径抽屉 ============ */
+  var sheetKind="";
+  function num(v){ return String(Math.round((Number(v)||0)*100)/100); }
+  function hmLabel(d){ return pad(d.getHours())+":"+pad(d.getMinutes()); }
+  function sheetLine(t){ return '<div class="s-line">'+t+'</div>'; }
+  function sheetNote(t){ return '<div class="s-sec s-note">'+t+'</div>'; }
+  function sheetHead(kicker,bigHtml){ return '<div class="s-kicker">'+kicker+'</div><div class="s-big">'+bigHtml+'</div>'; }
+  function sheetOpen(){ var s=document.getElementById("sheet"); return !!(s&&s.classList&&s.classList.contains("show")); }
+  // 今天已赚：金额走 todayEarn/amountOf，工时拆解走 workSplit（与 workMsOf 同源）
+  function sheetToday(now){
+    var earn=todayEarn(now), r=todayRec(), rate=(r&&r.rate)||todayRate(), sp=workSplit(todayKey(),now);
+    var head=sheetHead("今天已赚",moneyHTML(earn));
+    var note=sheetNote("说明：按设置里的 "+modeLabel()+" "+num(S.salary)+"、"+num(S.days>0?S.days:21.75)+" 天、"+num(paidHours())+" 小时折算；不含个税与社保（本工具只按到手口径估算）；加班日按倍率另计。");
+    if(!sp.from||!(sp.total>0)){
+      return head+'<div class="s-sec">'+sheetLine("今天还没开始计时。点「开始上班」后，按「时薪 × 有效工时」累加；上班时间到现在的部分会先补算。")+'</div>'+note;
+    }
+    var line1="时薪 "+money(rate)+" × 有效工时 "+hms(sp.eff)+" = "+money(earn);
+    var line2="有效工时 = 上班 "+hmLabel(new Date(sp.from))+" → "+(sp.to===now?"现在 "+hmLabel(new Date(sp.to)):"下班 "+hmLabel(new Date(sp.to)))+"（"+hms(sp.total)+"）− 午休 "+hms(sp.lunch);
+    if(sp.pauses>0) line2+=" − 暂停 "+hms(sp.pauses);
+    return head+'<div class="s-sec">'+sheetLine(line1)+sheetLine(line2)+'</div>'+note;
+  }
+  // 时薪：全部走 hourly/dailyPay/monthlyPay/paidHours
+  function sheetRate(){
+    var days=(S.days>0?S.days:21.75), hh=paidHours();
+    var head=sheetHead("时薪",money(hourly()));
+    var l1="折合月薪 "+money(monthlyPay())+" ÷ "+num(days)+" 天 ÷ "+num(hh)+" 小时 = "+money(hourly());
+    var l2="日薪 "+money(dailyPay())+" = 折合月薪 "+money(monthlyPay())+" ÷ "+num(days)+" 天";
+    return head+'<div class="s-sec">'+sheetLine(l1)+sheetLine(l2)+'</div>'
+      +sheetNote("说明：21.75 是月均计薪天数（(365−104)/12），当月实际工作日会多几天，所以月末对账可能有几十元偏差；可在月末对账里校准。不含个税与社保（本工具只按到手口径估算）。");
+  }
+  // 本期已赚：总额走 periodTotal，分类型走 periodGroups（两者同用 dayValue）
+  function sheetPeriod(now){
+    var st=periodTotal(now), pg=periodGroups(now), pr=periodRange(now), tk=todayKey(), workdays=0;
+    periodKeys(now).forEach(function(k){ if(k<=tk&&afterClear(k)&&baseWorkday(k)) workdays++; });
+    var head=sheetHead("本期已赚",money(st.total));
+    var d1="账期 "+dateKey(pr.start).slice(5)+" → "+dateKey(new Date(pr.end.getTime()-86400000)).slice(5)+"（发薪日 "+(S.payDay||15)+" 号），共 "+workdays+" 个工作日";
+    var parts=[];
+    GROUP_ORDER.forEach(function(t){
+      var g=pg.groups[t]; if(!g) return;
+      var lab=GROUP_LABEL[t]||t;
+      if(t==="ot"){
+        var muls={}; periodKeys(now).forEach(function(k){ var r=R[k]; if(r&&r.type==="ot") muls[String(r.mul||1.5)]=1; });
+        lab+=" ×"+Object.keys(muls).join("/");
+      }
+      parts.push(lab+" "+g.n+" 天 "+money(g.sum));
+    });
+    var d2="其中："+(parts.join(" / ")||"本期还没有数据");
+    var d3="合计 "+money(st.total);
+    return head+'<div class="s-sec">'+sheetLine(d1)+sheetLine(d2)+sheetLine(d3)+'</div>'
+      +sheetNote("说明：每天的金额可在日历里点开查看；被标记为休息/病假的天按规则折算。");
+  }
+  function openSheet(kind){
+    var now=Date.now(), html="";
+    if(kind==="today") html=sheetToday(now);
+    else if(kind==="rate") html=sheetRate();
+    else html=sheetPeriod(now);
+    var t=document.getElementById("sheetTitle");
+    if(t) t.textContent=(kind==="today"?"今天这笔钱怎么算":kind==="rate"?"时薪怎么算":"本期这笔钱怎么算");
+    var b=document.getElementById("sheetBody"); if(b) b.innerHTML=html;
+    document.getElementById("sheet").classList.add("show");
+    document.getElementById("sheetMask").classList.add("show");
+    sheetKind=kind;
+    var sh=document.getElementById("sheet"); if(sh&&sh.focus){ try{ sh.focus(); }catch(e){} }
+  }
+  function closeSheet(){
+    document.getElementById("sheet").classList.remove("show");
+    document.getElementById("sheetMask").classList.remove("show");
+    sheetKind="";
+  }
+  function toggleSheet(kind){
+    if(sheetOpen()&&sheetKind===kind){ closeSheet(); return; }
+    openSheet(kind);
+  }
+
   /* ============ 渲染 ============ */
-  function renderStats(now){
-    var box=document.getElementById("statBody"); if(!box) return;
+  var GROUP_LABEL={work:"正常上班",p80:"上班 80%",ot:"加班",paid:"带薪假",sick:"病假",half:"半天班",off:"休息",weekend:"周末"};
+  var GROUP_ORDER=["work","p80","half","ot","paid","sick","off","weekend"];
+  // 本期按类型分组：金额只走 dayValue，与「本期已赚」(periodTotal) 同口径；抽屉与构成卡共用
+  // v28.01 对账基准：满勤应得 = 当月已过工作日 × 当前日薪（请假/加班之前的「正常出勤」口径）
+  // 注意它不等于「本期已赚」：后者按病假 60%/休息 0/加班倍率折算。归因以满勤为基准，所以
+  // 病假/休息/加班的 impact 可以直接相加，残差才是代扣、填错、未标记请假等。
+  function fullEstimate(now){
+    var tk=todayKey(), pay=dayPayNow(), sum=0, workdays=0;
+    periodKeys(now).forEach(function(k){
+      // 只算「已经过完的日子」：今天还没结束，金额随时会变，不纳入满勤基准
+      if(k>=tk||!afterClear(k)) return;
+      if(!baseWorkday(k)) return;
+      workdays++; sum+=pay;
+    });
+    return {total:sum, workdays:workdays, pay:pay};
+  }
+  function periodGroups(now){
     var keys=periodKeys(now), tk=todayKey(), groups={};
-    var label={work:"正常上班",p80:"上班 80%",ot:"加班",paid:"带薪假",sick:"病假",half:"半天班",off:"休息",weekend:"周末"};
     keys.forEach(function(k){
       if(k>tk||!afterClear(k)) return;
       var r=R[k]||{}, t=r.type;
@@ -331,11 +682,15 @@
       var g=groups[t]||(groups[t]={n:0,sum:0});
       g.n++; g.sum+=v;
     });
-    var order=["work","p80","half","ot","paid","sick","off","weekend"];
-    var total=0; order.forEach(function(t){ if(groups[t]) total+=groups[t].sum; });
-    var html=order.filter(function(t){return groups[t];}).map(function(t){
+    var total=0; GROUP_ORDER.forEach(function(t){ if(groups[t]) total+=groups[t].sum; });
+    return {groups:groups,total:total};
+  }
+  function renderStats(now){
+    var box=document.getElementById("statBody"); if(!box) return;
+    var pg=periodGroups(now), groups=pg.groups, total=pg.total;
+    var html=GROUP_ORDER.filter(function(t){return groups[t];}).map(function(t){
       var g=groups[t], pct=total>0?g.sum/total*100:0;
-      return '<div class="srow"><span class="sname">'+(label[t]||t)+'</span>'+
+      return '<div class="srow"><span class="sname">'+(GROUP_LABEL[t]||t)+'</span>'+
         '<span class="scnt">'+g.n+' 天</span>'+
         '<div class="bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'+
         '<span class="ssum">'+money(g.sum)+'</span></div>';
@@ -398,10 +753,7 @@
     document.getElementById("monthEarn").textContent=money(st.total);
 
     var rEl=document.getElementById("rateTxt");
-    if(rateView===0) rEl.textContent=money(rate)+" / "+money(rate/60)+" / "+money4(rate/3600);
-    else if(rateView===1) rEl.textContent="日薪 "+money(dailyPay()*mul());
-    else if(rateView===2) rEl.textContent=modeLabel()+" "+money(S.salary);
-    else rEl.textContent="年 "+money(monthlyPay()*12);
+    rEl.textContent=money(rate)+" / "+money(rate/60)+" / "+money4(rate/3600);
 
     var cd=document.getElementById("countdown");
     var endT=atTime(new Date(),S.workEnd).getTime(), left=endT-now;
@@ -432,6 +784,7 @@
     renderGoals(now);
     applyTheme();
     renderStats(now);
+    renderActual(now);
     renderHistory(now);
     var _lb=document.getElementById("monthEarnLabel");
     if(_lb) _lb.textContent=((S.payDay||15)===1)?"本月已赚":"本期已赚";
@@ -443,9 +796,6 @@
       try{ window.open(location.pathname+"?mini=1","niuma_mini","width=430,height=380,menubar=no,toolbar=no"); }catch(e){}
     });
   })();
-    var _lb=document.getElementById("monthEarnLabel");
-    if(_lb) _lb.textContent=((S.payDay||15)===1)?"本月已赚":"本期已赚";
-    var _st=document.getElementById("sumTag"); if(_st) _st.textContent="本期 "+st.days+" 天 · 合计 "+money(st.total);
 
   document.getElementById("btnStart").style.display=(started()||ended())?"none":"inline-block";
     document.getElementById("btnStop").style.display=started()?"inline-block":"none";
@@ -732,13 +1082,19 @@
   document.getElementById("btnStop").addEventListener("click",stopToday);
   document.getElementById("btnRestart").addEventListener("click",restartToday);
 
-  document.getElementById("chipRate").addEventListener("click",function(){rateView=(rateView+1)%4;render();});
-  document.getElementById("chipMonth").addEventListener("click",function(){
-    var st=periodTotal(Date.now());
-    alert("本月已赚 "+money(st.total)+"\n月薪 "+money(S.salary)+
-      "\n完成度 "+(S.salary>0?Math.min(100,st.total/S.salary*100).toFixed(1):"0")+"%"+
-      "\n已记录 "+st.days+" 天");
-  });
+  /* v28 三个可点数字 → 口径抽屉（再点同一个 / 点遮罩 / 关闭按钮 / Esc 都可关） */
+  (function(){
+    function bind(id,kind){
+      var el=document.getElementById(id); if(!el||!el.addEventListener) return;
+      el.addEventListener("click",function(){ toggleSheet(kind); });
+      el.addEventListener("keydown",function(e){
+        if(e.code==="Enter"){ if(e.preventDefault) e.preventDefault(); toggleSheet(kind); }
+      });
+    }
+    bind("hitToday","today"); bind("chipRate","rate"); bind("chipMonth","period");
+    var c=document.getElementById("sheetClose"); if(c&&c.addEventListener) c.addEventListener("click",closeSheet);
+    var m=document.getElementById("sheetMask"); if(m&&m.addEventListener) m.addEventListener("click",closeSheet);
+  })();
 
   document.getElementById("btnTheme").addEventListener("click",function(){
     S.theme=(S.theme==="dark")?"light":"dark"; saveSettings(); applyTheme();
@@ -754,6 +1110,11 @@
       try{ location.href=location.pathname; }catch(e){}
     });
   })();
+  document.getElementById("btnActSave").addEventListener("click",saveActualFromForm);
+  document.getElementById("btnActCancel").addEventListener("click",closeActual);
+  document.getElementById("btnActDone").addEventListener("click",closeActual);
+  document.getElementById("btnActHistBack").addEventListener("click",function(){ setActView("actFormView"); });
+  document.getElementById("btnActHistFromResult").addEventListener("click",showActualHistory);
   document.getElementById("btnBackup").addEventListener("click",function(){
     var obj={app:"牛马计时器",ver:"v21",at:new Date().toISOString(),settings:S,records:R,goals:GOALS,meta:META};
     var blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
@@ -873,6 +1234,7 @@
   });
 
   document.addEventListener("keydown",function(e){
+    if(e.code==="Escape"){ if(sheetOpen()) closeSheet(); return; }
     var t=e.target&&e.target.tagName;
     if(t==="INPUT"||t==="SELECT"||t==="TEXTAREA"||t==="BUTTON") return;
     if(e.code==="Space"){
@@ -931,6 +1293,7 @@
             localStorage.setItem(LS_SET,JSON.stringify(S));
             localStorage.setItem(LS_REC,JSON.stringify(R));
             localStorage.setItem(LS_GOALS,JSON.stringify(GOALS));
+            localStorage.setItem(LS_ACT,JSON.stringify(ACTUALS));
             localStorage.setItem(LS_AT,String(snap.at));
           }catch(e){}
           fillForm(); render(); renderTables(); renderCalendar();

@@ -4,7 +4,7 @@
 
 纯前端单文件，双击 `index.html` 就能用，不装任何东西，数据只存在你自己的浏览器里。
 
-![版本](https://img.shields.io/badge/version-v30.04-blue) ![测试](https://img.shields.io/badge/tests-388%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![版本](https://img.shields.io/badge/version-v30.05-blue) ![测试](https://img.shields.io/badge/tests-396%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -96,6 +96,7 @@ _tests/
 
 | 版本 | 内容 |
 |---|---|
+| v30.05 | 删掉「空格 = 开始上班」文字提示（DOM、CSS、媒体查询里一并移除，不是隐藏）：快捷键保留，按空格仍能开始、输入框内仍不触发；手机 `.chips` 改 `repeat(2,minmax(0,1fr))` 与基础规则对齐；移动端规格里的主数字 clamp 回写为实现值 40–72 |
 | v30.04 | 手机端布局修复：整页不再横向溢出（`html,body` overflow-x + `.wrap` 盒模型）、顶部栏可换行且手机隐藏「小窗」入口、主数字 `clamp(40px,12vw,72px)` 单行不裁小数、三栏在 ≤720px 变两列且「时薪/每分钟/每秒」通栏单行、进度行 baseline 对齐可换行不裁字 |
 | v30.03 | 深色模式重做：按《深色模式配色 v1》重铺 token（页面 `#070D13` / 卡片 `#182633` / 控件面 `#20323F`），主数字改实渐变 `#4FD1C5 → #7BE495`，进度条/三态徽章/日历/抽屉逐项配值；深色不再出现纯白面，正文对比 ≥ 4.5:1；顺带把「这个月第 N 天」改成「第 N 个上班日」，JS 内联色收进 CSS 变量 |
 | v8–v9 | 计时状态机重写；发薪周期 + 日历 |

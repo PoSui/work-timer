@@ -624,8 +624,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.04", "title 是 v30.04（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.04", "brand 是 v30.04（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.05", "title 是 v30.05（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.05", "brand 是 v30.05（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -633,7 +633,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.04 \|/m.test(readmeSrc), "README 版本历史有 v30.04 行");
+ok(/^\| v30\.05 \|/m.test(readmeSrc), "README 版本历史有 v30.05 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1351,7 +1351,7 @@ console.log("\n=== 65. 手机端布局（375px 不溢出、三栏两列、主数
 
   /* 2) 三栏断点内两列，时薪卡通栏 */
   var chipsMq = decls(mq, ".chips") + decls(mq, ".grid3");
-  ok(/grid-template-columns\s*:\s*1fr\s+1fr/.test(chipsMq) || /grid-template-columns\s*:\s*repeat\(2,\s*1fr\)/.test(chipsMq),
+  ok(/grid-template-columns\s*:\s*(1fr\s+1fr|repeat\(2,\s*1fr\)|repeat\(2,\s*minmax\(0,\s*1fr\)\))/.test(chipsMq),
      "断点内 .chips/.grid3 变两列（实际：" + (chipsMq || "无") + "）");
   ok(/grid-column\s*:\s*1\s*\/\s*-1/.test(decls(mq, "#chipRate")), "断点内时薪卡 grid-column:1/-1 通栏");
   ok(/white-space\s*:\s*nowrap/.test(decls(mq, "#rateTxt")), "断点内三段时薪单行不换行");
@@ -1388,6 +1388,29 @@ console.log("\n=== 65. 手机端布局（375px 不溢出、三栏两列、主数
   /* 8) 深浅两套 token 不受影响 */
   ok(/body\.dark\{[\s\S]*?--card:#182633/.test(src), "深色 token 仍在");
   ok(/linear-gradient\(92deg,#1f8fe0 10%,#22c58b 90%\)/.test(src), "亮色主数字渐变未被布局改动影响");
+})();
+
+
+/* ===== 66. 空格提示已删除（v30.05）：DOM/CSS/文案都不留，快捷键仍在 ===== */
+console.log("\n=== 66. 删掉「空格」文字提示，快捷键仍可用 ===");
+(function(){
+  var css66 = (htmlSrc.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || "";
+  ok(htmlSrc.indexOf('class="hint"') < 0, "DOM 里没有 .hint 提示（真删除，不是 display:none）");
+  ok(htmlSrc.indexOf("空格") < 0, "页面文案里不再出现「空格」");
+  ok(!/\.hint\s*[{,:]/.test(css66), "CSS 里没有 .hint 规则（含 body.mini / 媒体查询里的）");
+  ok(!/aria[^>]*空格/.test(htmlSrc), "没有残留的「空格」aria 提示");
+
+  setClock("2026-11-11T10:00:00"); setRecs({}); boot();
+  ok(nodes["stateTag"].textContent === "未开始", "删提示后 boot 仍是未开始");
+  docKey({ code: "Space", target: { tagName: "BODY" }, preventDefault(){} });
+  ok(nodes["stateTag"].textContent === "工作中", "页面按空格仍能开始上班");
+
+  setClock("2026-11-11T10:00:00"); setRecs({}); boot();
+  docKey({ code: "Space", target: { tagName: "INPUT", classList: { contains: function(){ return false; } } }, preventDefault(){} });
+  ok(nodes["stateTag"].textContent === "未开始", "输入框里按空格仍不触发");
+
+  /* 手机上也没有这个提示了（断点内不再有 .hint 覆盖） */
+  ok(!/\.hint/.test(css66), "手机断点里也没有 .hint 残留");
 })();
 
 console.log("");

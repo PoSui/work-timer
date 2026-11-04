@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v30.04</title>
+<title>牛马计时器 v30.05</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -66,7 +66,6 @@
   .b-ghost{background:#fff;color:var(--dim);border:1px solid #dce9f5;padding:9px 14px;font-size:12.5px;border-radius:9px}
   .b-ghost:hover{color:var(--deep);border-color:#a9d3f5}
   button:disabled{opacity:.4;cursor:not-allowed}
-  .hint{text-align:center;font-size:11.5px;color:#9db0c2;margin-top:12px}
   kbd{background:#eef6fd;border:1px solid #dbeaf7;border-radius:5px;padding:1px 6px;font-size:11px;font-family:Consolas;color:#43607a}
   details summary{cursor:pointer;color:var(--dim);font-size:13px;list-style:none;user-select:none}
   details summary::-webkit-details-marker{display:none}
@@ -153,7 +152,6 @@
   body.mini .money{font-size:44px}
   body.mini .sub{font-size:12px}
   body.mini .chips{gap:6px}
-  body.mini .hint{display:none}
   body.mini .btns{margin-top:8px}
   body.mini #btnBig{display:inline-block}
   .mini-btn{border:1px solid #cfe3f5;background:#fff;color:#2b6fa8;border-radius:9px;padding:5px 11px;font-size:12px;cursor:pointer}
@@ -356,8 +354,8 @@
     .card{padding:16px 14px;border-radius:16px;margin-bottom:12px}
     .main{padding:22px 12px 18px}
     .money{font-size:clamp(40px,12vw,72px);white-space:nowrap;letter-spacing:-1px}
-    .chips{grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
-    .grid3{grid-template-columns:1fr 1fr}
+    .chips{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:14px}
+    .grid3{grid-template-columns:repeat(2,minmax(0,1fr))}
     #chipMonth{grid-row:1;grid-column:1}
     #chipLeft{grid-row:1;grid-column:2}
     #chipRate{grid-row:2;grid-column:1/-1}
@@ -368,7 +366,6 @@
     .btns{margin-top:18px;gap:8px}
     .b-go{width:100%;min-width:0}
     .b-stop,.b-ghost{min-width:0;flex:1 1 auto}
-    .hint{font-size:11px}
     h2{font-size:15px}
     .maxh{max-height:56vh}
   }
@@ -379,7 +376,7 @@
   <div id="errBar" style="display:none"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v30.04</div>
+    <div class="brand">牛马计时器 · v30.05</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -428,7 +425,6 @@
       <button class="b-stop" id="btnStop" style="display:none">下班存档</button>
       <button class="b-ghost" id="btnRestart" style="display:none">继续计时（回滚存档）</button>
     </div>
-    <div class="hint">空格 = 开始上班（输入框内不触发）</div>
     <div id="daySummary" class="day-sum" role="button" tabindex="0" aria-expanded="false" aria-label="下班小结，点开看今日、本月、本年" style="display:none"></div>
     <div id="daySummaryMore" class="day-sum-more" style="display:none"></div>
   </div>

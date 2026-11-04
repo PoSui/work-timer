@@ -622,13 +622,12 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v29", "title 是 v29（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v29", "brand 是 v29（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v28.02", "title 是 v28.02（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v28.02", "brand 是 v28.02（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
 ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
-ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 
 
 /* ===== v27 月末对账 ===== */

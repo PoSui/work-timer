@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v29</title>
+<title>牛马计时器 v28.02</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -217,21 +217,6 @@
   body.dark .s-line{color:#c3d3e0}
   .s-note{font-size:12px;line-height:1.7;color:#7f93a6}
   body.dark .s-note{color:#8ca1b3}
-  /* v29 时薪轨迹 */
-  #phaseCard summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
-  #phaseCard summary::-webkit-details-marker{display:none}
-  .ph-t{font-weight:700}
-  .ph-svg{width:100%;height:118px;display:block;margin:8px 0 2px}
-  .ph-line{stroke:#22a06b}
-  .ph-dot{fill:#22a06b}
-  .ph-lab{font-size:9px;fill:#5b7285}
-  .ph-sent{font-size:13px;color:#33475b;line-height:1.7}
-  .ph-list{margin:8px 0 4px}
-  .ph-row{display:flex;gap:6px;margin:6px 0;align-items:center}
-  .ph-in{border:1px solid #dbe6ef;border-radius:8px;padding:5px 7px;font-size:12px;background:#fff;color:#1d2b36}
-  .ph-m{width:88px}
-  .ph-s{width:100px}
-  .ph-n{flex:1;min-width:0}
 </style>
 </head>
 <body>
@@ -239,7 +224,7 @@
   <div id="errBar" style="display:none;background:#ffe1e1;border:1px solid #ffb3b3;color:#a12020;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:12px;line-height:1.6"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v29</div>
+    <div class="brand">牛马计时器 · v28.02</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -317,13 +302,6 @@
   <div class="card" id="actualCard">
     <div class="rowflex"><h2>月末对账</h2><span class="tag">满勤应得 vs 到手</span></div>
     <div id="actualBody"></div>
-  </div>
-
-  <div class="card" id="phaseCard" style="display:none">
-    <details>
-      <summary><span class="ph-t">我的时间值多少 · 时薪轨迹</span><span class="tag">折叠</span></summary>
-      <div id="phaseBody"></div>
-    </details>
   </div>
 
   <div class="card" id="histCard">

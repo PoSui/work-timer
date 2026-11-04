@@ -4,12 +4,3 @@ node_modules/
 Thumbs.db
 *.tmp
 *.zip
-
-# 临时文件/补丁脚本（2026-11-04 事故后加：禁止把 patch_*.py、_.js 放到仓库根）
-.tmp/
-patch_*.py
-head_*.html
-head_*.js
-harness_strict.js
-*.orig
-*.rej

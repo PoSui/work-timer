@@ -3,8 +3,8 @@
 
   /* ============ 常量与存储 ============ */
   var LS_SET="niuma.settings.v8", LS_REC="niuma.records.v8", LS_GOALS="niuma.goals.v15";
-  var DEFAULT={salary:0,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
-    workStart:"09:00",workEnd:"18:00",breakStart:"12:00",breakEnd:"13:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
+  var DEFAULT={salary:9800,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
+    workStart:"08:30",workEnd:"18:00",breakStart:"11:30",breakEnd:"14:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
 
   var S=loadSettings(), R=loadRecords();
   var GOALS=loadGoals();
@@ -31,9 +31,10 @@
   function loadSettings(){try{var raw=localStorage.getItem(LS_SET);
     if(!raw)return Object.assign({},DEFAULT);return Object.assign({},DEFAULT,JSON.parse(raw));}
     catch(e){return Object.assign({},DEFAULT);}}
-  function saveSettings(){localStorage.setItem(LS_SET,JSON.stringify(S));}
+  function saveSettings(){try{localStorage.setItem(LS_SET,JSON.stringify(S));}catch(e){} touchStore();}
   function loadRecords(){try{return JSON.parse(localStorage.getItem(LS_REC)||"{}");}catch(e){return {};}}
-  function saveRecords(){localStorage.setItem(LS_REC,JSON.stringify(R));}
+  function saveRecords(){try{localStorage.setItem(LS_REC,JSON.stringify(R));}catch(e){} touchStore();}
+  function touchStore(){ try{ if(IDB && IDB.putSoon) IDB.putSoon(); }catch(e){} }
 
   /* ============ 计算口径 ============ */
   function paidHours(){
@@ -197,7 +198,67 @@
     return sum;
   }
   function loadGoals(){ try{ var a=JSON.parse(localStorage.getItem(LS_GOALS)||"[]"); return Array.isArray(a)?a:[]; }catch(e){ return []; } }
-  function saveGoals(){ try{ localStorage.setItem(LS_GOALS,JSON.stringify(GOALS)); }catch(e){} }
+  function saveGoals(){ try{ localStorage.setItem(LS_GOALS,JSON.stringify(GOALS)); }catch(e){} touchStore(); }
+
+  /* ============ IndexedDB 持久层（v25） ============ */
+  var LS_AT="niuma.at.v25", IDB_NAME="niuma-timer", IDB_VER=1, IDB_KEY="snap.v1";
+  var IDB=(function(){
+    var dbp=null, tmr=null;
+    function has(){ try{ return (typeof indexedDB!=="undefined") && indexedDB; }catch(e){ return false; } }
+    function open(){
+      if(dbp) return dbp;
+      if(!has()){ dbp=Promise.reject(new Error("no-idb")); dbp.catch(function(){}); return dbp; }
+      dbp=new Promise(function(res,rej){
+        var rq=indexedDB.open(IDB_NAME,IDB_VER);
+        rq.onupgradeneeded=function(){ var d=rq.result; if(!d.objectStoreNames.contains("kv")) d.createObjectStore("kv"); };
+        rq.onsuccess=function(){ res(rq.result); };
+        rq.onerror=function(){ rej(rq.error||new Error("idb-open")); };
+      });
+      dbp.catch(function(){});
+      return dbp;
+    }
+    function get(key){
+      return open().then(function(d){ return new Promise(function(res,rej){
+        var tx=d.transaction("kv","readonly"), rq=tx.objectStore("kv").get(key);
+        rq.onsuccess=function(){ res(rq.result||null); };
+        rq.onerror=function(){ rej(rq.error||new Error("idb-get")); };
+      });});
+    }
+    function put(key,val){
+      return open().then(function(d){ return new Promise(function(res,rej){
+        var tx=d.transaction("kv","readwrite"); tx.objectStore("kv").put(val,key);
+        tx.oncomplete=function(){ res(true); };
+        tx.onerror=function(){ rej(tx.error||new Error("idb-put")); };
+        tx.onabort=function(){ rej(tx.error||new Error("idb-abort")); };
+      });});
+    }
+    function snapshot(){ return {at:Date.now(),settings:S,records:R,goals:GOALS,meta:META}; }
+    function persist(){
+      if(!has()) return Promise.resolve(false);
+      var snap=snapshot();
+      try{ localStorage.setItem(LS_AT,String(snap.at)); }catch(e){}
+      return put(IDB_KEY,snap).catch(function(){ return false; });
+    }
+    function putSoon(){
+      if(!has()||tmr) return;
+      if(typeof setTimeout!=="function"){ persist(); return; }
+      tmr=setTimeout(function(){ tmr=null; persist(); },250);
+    }
+    function load(){ return get(IDB_KEY).catch(function(){ return null; }); }
+    function hydrate(snap){
+      if(!snap) return false;
+      try{
+        S=Object.assign({},DEFAULT,snap.settings||{});
+        R=(snap.records&&typeof snap.records==="object")?snap.records:{};
+        GOALS=Array.isArray(snap.goals)?snap.goals:[];
+        META=snap.meta||{};
+        return true;
+      }catch(e){ return false; }
+    }
+    function lsAt(){ try{ return +(localStorage.getItem(LS_AT)||0)||0; }catch(e){ return 0; } }
+    return {open:open,get:get,put:put,persist:persist,putSoon:putSoon,load:load,hydrate:hydrate,has:has,snapshot:snapshot,lsAt:lsAt};
+  })();
+  window.__niuma={IDB:IDB};
   function migrateGoal(){
     if(GOALS.length) return;
     if(S.goalAmount>0){ GOALS.push({id:"g"+Date.now(),name:S.goalName||"攒钱目标",amount:S.goalAmount,base:S.goalBase||0,from:S.goalFrom||todayKey()}); saveGoals(); }
@@ -325,9 +386,13 @@
     else {tag.textContent="未开始";tag.className="state";}
 
     var rate=todayRate();
-    document.getElementById("subLine").innerHTML=
-      (monthlyPay()>0?("每秒 <b>"+money(rate/3600)+"</b> · 每分钟 <b>"+money(rate/60)+"</b>"+
-        (mul()>1?" · 今日 "+mul()+" 倍":"")):"先在设置里填月薪，时薪才会算出来");
+    var sub=document.getElementById("subLine");
+    if(sub){
+      if(monthlyPay()<=0){ sub.innerHTML="还没填月薪 · 点「设置」填入月薪和上下班时间，就能按秒算钱"; }
+      else if(started()){ sub.innerHTML="工作中 · 每秒 <b>"+money(rate/3600)+"</b> · 每分钟 <b>"+money(rate/60)+"</b>"+(mul()>1?" · 今日 "+mul()+" 倍":""); }
+      else if(ended()){ sub.innerHTML="今天已存档 · 点「继续计时」可以接着算"; }
+      else{ sub.innerHTML="点「开始上班」= 今天从上班时间起补算，之后每秒自动加钱"; }
+    }
 
     var st=periodTotal(now);
     document.getElementById("monthEarn").textContent=money(st.total);
@@ -381,13 +446,6 @@
     var _lb=document.getElementById("monthEarnLabel");
     if(_lb) _lb.textContent=((S.payDay||15)===1)?"本月已赚":"本期已赚";
     var _st=document.getElementById("sumTag"); if(_st) _st.textContent="本期 "+st.days+" 天 · 合计 "+money(st.total);
-
-    (function(){
-    var b=document.getElementById("btnMini");
-    if(b) b.addEventListener("click",function(){
-      try{ window.open(location.pathname+"?mini=1","niuma_mini","width=430,height=380,menubar=no,toolbar=no"); }catch(e){}
-    });
-  })();
 
   document.getElementById("btnStart").style.display=(started()||ended())?"none":"inline-block";
     document.getElementById("btnStop").style.display=started()?"inline-block":"none";
@@ -504,8 +562,19 @@
   }
 
   /* ============ 动作 ============ */
+  function setErr(msg){
+    var b=document.getElementById("errBar"); if(!b) return;
+    if(msg){ b.style.display="block"; b.textContent=msg; }
+    else { b.style.display="none"; b.textContent=""; }
+  }
   function startTimer(){
     if(started()||ended()) return;
+    if(!(monthlyPay()>0)||!(paidHours()>0)){
+      setErr("先填月薪和上下班时间，再点「开始上班」。");
+      openSetup();
+      return;
+    }
+    setErr("");
     var base=atTime(new Date(),S.workStart).getTime();
     R[todayKey()]={startMs:base,endMs:null,pauses:[],pauseStartMs:null,earnedMs:0,earned:0,rate:todayRate()};
     saveRecords(); render(); renderTables(); renderCalendar(); startFast();
@@ -563,37 +632,39 @@
       (mul()>1?"（今日按 "+mul()+" 倍计）":"")+
       (monthlyPay()>0?"":"　<b>← 还没填工资</b>");
   }
+  function setVal(id,v){var e=document.getElementById(id); if(e) e.value=v;}
+  function getVal(id,d){var e=document.getElementById(id); if(!e) return d; return e.value!==""?e.value:d;}
   function fillForm(){
-    document.getElementById("iSalary").value=S.salary||"";
-    document.getElementById("iMode").value=S.mode||"month";
-    document.getElementById("iMonths").value=String(S.months||12);
-    document.getElementById("iDays").value=S.days;
-    document.getElementById("iHours").value=paidHours()+" 小时";
-    document.getElementById("iStart").value=S.workStart;
-    document.getElementById("iEnd").value=S.workEnd;
-    document.getElementById("iBS").value=S.breakStart;
-    document.getElementById("iBE").value=S.breakEnd;
-    document.getElementById("iMul").value=String(mul());
-    document.getElementById("iFreq").value=String(S.freq||100);
-    document.getElementById("iPayDay").value=S.payDay||15;
-    document.getElementById("iRest").value=S.restMode||"double";
-    document.getElementById("iRemind").value=(S.remind!==false)?"1":"0";
+    setVal("iSalary",S.salary||"");
+    setVal("iMode",S.mode||"month");
+    setVal("iMonths",String(S.months||12));
+    setVal("iDays",S.days);
+    setVal("iHours",paidHours()+" 小时");
+    setVal("iStart",S.workStart);
+    setVal("iEnd",S.workEnd);
+    setVal("iBS",S.breakStart);
+    setVal("iBE",S.breakEnd);
+    setVal("iMul",String(mul()));
+    setVal("iFreq",String(S.freq||100));
+    setVal("iPayDay",S.payDay||15);
+    setVal("iRest",S.restMode||"double");
+    setVal("iRemind",(S.remind!==false)?"1":"0");
     updateFormula();
   }
   function readForm(){
-    S.salary=parseFloat(document.getElementById("iSalary").value)||0;
-    S.mode=document.getElementById("iMode").value||"month";
-    S.months=parseFloat(document.getElementById("iMonths").value)||12;
-    S.days=parseFloat(document.getElementById("iDays").value)||21.75;
-    S.workStart=document.getElementById("iStart").value||"09:00";
-    S.workEnd=document.getElementById("iEnd").value||"18:00";
-    S.breakStart=document.getElementById("iBS").value||"12:00";
-    S.breakEnd=document.getElementById("iBE").value||"13:00";
-    S.mul=parseFloat(document.getElementById("iMul").value)||1;
-    S.freq=parseInt(document.getElementById("iFreq").value,10)||100;
-    S.payDay=Math.min(31,Math.max(1,parseInt(document.getElementById("iPayDay").value,10)||15));
-    S.restMode=document.getElementById("iRest").value||"double";
-    S.remind=document.getElementById("iRemind").value!=="0";
+    S.salary=parseFloat(getVal("iSalary",""))||0;
+    S.mode=getVal("iMode","month");
+    S.months=parseFloat(getVal("iMonths","12"))||12;
+    S.days=parseFloat(getVal("iDays",""))||21.75;
+    S.workStart=getVal("iStart","09:00");
+    S.workEnd=getVal("iEnd","18:00");
+    S.breakStart=getVal("iBS","12:00");
+    S.breakEnd=getVal("iBE","13:00");
+    S.mul=parseFloat(getVal("iMul","1"))||1;
+    S.freq=parseInt(getVal("iFreq","100"),10)||100;
+    S.payDay=Math.min(31,Math.max(1,parseInt(getVal("iPayDay","15"),10)||15));
+    S.restMode=getVal("iRest","double");
+    S.remind=getVal("iRemind","1")!=="0";
     S.hours=paidHours();
   }
 
@@ -671,8 +742,18 @@
 
   document.getElementById("btnTheme").addEventListener("click",function(){
     S.theme=(S.theme==="dark")?"light":"dark"; saveSettings(); applyTheme();
-    if(document.body&&document.body.classList){ }
   });
+  /* v26.01 小窗：?mini=1 时进入紧凑版，并给「回大窗」出口 */
+  (function(){
+    var isMini=false;
+    try{ isMini=/(?:^|[?&])mini=1(?:&|$)/.test(String(location.search||"")); }catch(e){ isMini=false; }
+    if(isMini && document.body && document.body.classList){ document.body.classList.add("mini"); }
+    var b=document.getElementById("btnBig");
+    if(b) b.addEventListener("click",function(){
+      try{ window.close(); }catch(e){}
+      try{ location.href=location.pathname; }catch(e){}
+    });
+  })();
   document.getElementById("btnBackup").addEventListener("click",function(){
     var obj={app:"牛马计时器",ver:"v21",at:new Date().toISOString(),settings:S,records:R,goals:GOALS,meta:META};
     var blob=new Blob([JSON.stringify(obj,null,2)],{type:"application/json"});
@@ -695,6 +776,7 @@
   });
   document.getElementById("btnSave").addEventListener("click",function(){
     readForm(); saveSettings(); document.getElementById("box").open=false;
+    setErr("");
     render(); renderTables(); renderCalendar(); startFast(); updateFormula();
   });
 
@@ -818,6 +900,7 @@
     S.breakStart=document.getElementById("mBS").value||"12:00";
     S.breakEnd=document.getElementById("mBE").value||"13:00";
     S.hours=paidHours(); saveSettings();
+    setErr("");
     document.getElementById("setupModal").classList.remove("show");
     fillForm(); render(); renderTables(); renderCalendar();
   });
@@ -836,5 +919,28 @@
   finalizeStale();
   loadMeta(); fillForm(); render(); renderTables(); renderCalendar(); startUi();
   if(started()) startFast();
-  if(!localStorage.getItem(LS_SET)) openSetup();
+  if(!(monthlyPay()>0)) openSetup();
+
+  /* IDB 异步水合：IDB 里比本地缓存新时，用 IDB 的数据覆盖内存并重绘 */
+  try{
+    IDB.load().then(function(snap){
+      if(snap && snap.at>IDB.lsAt()){
+        if(IDB.hydrate(snap)){
+          try{
+            localStorage.setItem(LS_SET,JSON.stringify(S));
+            localStorage.setItem(LS_REC,JSON.stringify(R));
+            localStorage.setItem(LS_GOALS,JSON.stringify(GOALS));
+            localStorage.setItem(LS_AT,String(snap.at));
+          }catch(e){}
+          fillForm(); render(); renderTables(); renderCalendar();
+          if(started()) startFast();
+          try{ document.getElementById("setupModal").classList.remove("show"); }catch(e){}
+          try{ document.documentElement.setAttribute("data-store","idb"); }catch(e){}
+        }
+      }else if(!snap){
+        IDB.persist();
+        try{ document.documentElement.setAttribute("data-store","idb"); }catch(e){}
+      }
+    }).catch(function(){});
+  }catch(e){}
 })();

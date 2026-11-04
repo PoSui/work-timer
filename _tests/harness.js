@@ -96,8 +96,8 @@ console.log("\n=== 1. 首次打开 ===");
 boot();
 ok(moneyOf("todayEarn") === 0, "大数字 ¥0.00");
 ok(nodes["stateTag"].textContent === "未开始", "状态=未开始");
-ok(nodes["setupModal"].classList.contains("show"), "弹出设置窗");
-ok(!/45\.98/.test(txtOf("subLine")), "没有硬编码时薪提示");
+ok(!nodes["setupModal"].classList.contains("show"), "默认值已预填，首次打开不弹向导");
+ok(txtOf("rateTxt").indexOf("64.37") >= 0, "首次打开时薪已按默认 9800 算：64.37");
 
 /* 2 保存设置 */
 console.log("\n=== 2. 保存设置 ===");
@@ -268,6 +268,11 @@ const GUARDED = new Set(["rankWrap","rankTag","rankBody","detailBody","sumTag"])
 const refs = Array.from(APP.matchAll(/getElementById\("([\w-]+)"\)/g)).map(m => m[1]);
 const missing = Array.from(new Set(refs)).filter(id => ids.indexOf(id) < 0 && !GUARDED.has(id));
 ok(missing.length === 0, "无悬空引用" + (missing.length ? "：缺 " + missing.join(", ") : ""));
+/* 22b 与真实 HTML 对账：ids.json 是超集，光查它查不出「HTML 少了元素、JS 还在 getElementById」 */
+const GUARDED_HTML = new Set(["rankWrap","rankTag","rankBody","detailBody","sumTag","btnMini","mMode"]);
+const htmlIds22 = new Set(Array.from(fs.readFileSync(path.join(DIR, "..", "index.html"), "utf8").matchAll(/id="([\w-]+)"/g)).map(m => m[1]));
+const drift = Array.from(new Set(refs)).filter(id => !htmlIds22.has(id) && !GUARDED_HTML.has(id));
+ok(drift.length === 0, "HTML 与脚本无 id 漂移" + (drift.length ? "：HTML 缺 " + drift.join(", ") : ""));
 
 /* 23 输入框里按空格不触发开始 */
 console.log("=== 23. 输入框空格不误触 ===");
@@ -552,6 +557,57 @@ boot();
 ok(document.body.classList.contains("dark"), "刷新后仍深色");
 click("btnTheme");
 ok(!document.body.classList.contains("dark"), "再点回到浅色");
+
+/* 46 无薪资 → 点开始弹向导、不计时、提示先填 */
+console.log("\n=== 46. 无薪资时点开始 ===");
+store = {}; setSetting({ salary: 0, days: 21.75, workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00" });
+boot();
+ok(nodes["setupModal"].classList.contains("show"), "没填月薪时自动弹向导");
+click("btnStart");
+ok(nodes["stateTag"].textContent === "未开始", "没填月薪点开始不计时");
+ok(!recs()["2026-11-03"], "不写入当天记录");
+ok(/先填月薪/.test(nodes["errBar"].textContent), "errBar 提示先填：" + nodes["errBar"].textContent);
+ok(nodes["setupModal"].classList.contains("show"), "点开始后向导仍显示");
+
+/* 46b 本地已写过设置但 salary=0 → 刷新后仍弹向导 */
+store = {}; setSetting({ salary: 0, days: 21.75 });
+ok(!!store[KEY_SET], "本地已有设置缓存");
+boot();
+ok(nodes["setupModal"].classList.contains("show"), "salary=0 时刷新仍弹向导（不看 LS_SET 有没有）");
+
+/* 47 表单 id 与 HTML 一致：fillForm 引用的 id 必须真实存在 */
+console.log("\n=== 47. 设置表单 id 完整性 ===");
+const HTML_IDS = new Set(Array.from(htmlSrc.matchAll(/\bid="([\w-]+)"/g)).map(m => m[1]));
+const FORM_IDS = ["iSalary","iMode","iMonths","iDays","iHours","iStart","iEnd","iBS","iBE","iMul","iFreq","iPayDay","iRest","iRemind","formula","box","mSalary","mDays","mStart","mEnd","mBS","mBE","mSave","mSkip","setupModal"];
+const formMissing = FORM_IDS.filter(id => !HTML_IDS.has(id));
+ok(formMissing.length === 0, "HTML 缺这些设置 id：" + (formMissing.join(", ") || "无"));
+ok(nodes["iStart"].value === "08:30", "fillForm 执行完成（上班时间默认 08:30）");
+
+
+/* 48 小窗模式（v26.01）：?mini=1 必须真的进入紧凑版 */
+console.log("\n=== 48. 小窗模式 ===");
+global.location = { search: "?mini=1", pathname: "/index.html" };
+document.body.classList.remove("mini");
+boot();
+ok(document.body.classList.contains("mini"), "带 ?mini=1 启动：body 有 mini 类");
+ok(/body\.mini \.card:not\(\.main\)/.test(htmlSrc) && !/body\.mini #mainCard/.test(htmlSrc), "小窗 CSS 只依赖现存节点（.card.main）");
+ok(/id="btnBig"/.test(htmlSrc), "小窗里有「回大窗」按钮");
+global.location = { search: "", pathname: "/index.html" };
+document.body.classList.remove("mini");
+boot();
+ok(!document.body.classList.contains("mini"), "不带 ?mini=1 时不加 mini 类");
+
+
+/* 49 版本号一致性（v26.02）：title / brand / README 版本历史 三处同步 */
+console.log("\n=== 49. 版本号一致性 ===");
+const ti = htmlSrc.indexOf("<title>"), tj = htmlSrc.indexOf("</title>");
+const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
+const bi = htmlSrc.indexOf('class="brand">');
+const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
+const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
+ok(vTitle === "牛马计时器 v26.02", "title 是 v26.02（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v26.02", "brand 是 v26.02（实际：" + vBrand + "）");
+ok(/^\| v26\.02 \|/m.test(readmeSrc), "README 版本历史有 v26.02 行");
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

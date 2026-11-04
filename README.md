@@ -4,7 +4,7 @@
 
 纯前端单文件，双击 `index.html` 就能用，不装任何东西，数据只存在你自己的浏览器里。
 
-![版本](https://img.shields.io/badge/version-v24-blue) ![测试](https://img.shields.io/badge/tests-140%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![版本](https://img.shields.io/badge/version-v26.02-blue) ![测试](https://img.shields.io/badge/tests-155%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -48,17 +48,20 @@
 4. 下班点「下班存档」
 5. 日历上补点过去的日子（请假、加班、半天）
 
-数据全部在浏览器 localStorage，不上传任何服务器。
+数据全部在浏览器本地（IndexedDB 主存 + localStorage 缓存），不上传任何服务器。
 
-**注意**：清浏览器缓存会清掉数据，重要的话定期点「导出备份 JSON」。
+**注意**：清浏览器缓存（尤其是「清除站点数据」）会清掉数据；只清 cookie 不影响 IndexedDB。重要数据请定期点「导出备份 JSON」。
 
 ---
 
 ## 开发
 
 ```bash
-# 跑测试（140 条断言，无浏览器、假时钟）
+# 业务逻辑测试（140 条断言，无浏览器、假时钟）
 node _tests/harness.js
+
+# IndexedDB 持久层测试（15 条断言，含假 indexedDB）
+node _tests/idb.test.js
 ```
 
 结构：
@@ -69,6 +72,7 @@ _tests/
   app.v8.js         业务逻辑源文件（构建时注入 index.html）
   app.js            注入用副本
   harness.js        测试台：假时钟 + DOM 桩 + localStorage 桩
+  idb.test.js       IndexedDB 持久层测试（假 indexedDB + 快照恢复）
   ids.json          DOM id 清单
 ```
 
@@ -89,6 +93,10 @@ _tests/
 | v22 | 四种计薪方式（月薪/日薪/时薪/年薪 N 薪） |
 | v23 | 近 6 个月柱状图 + 年度累计 |
 | v24 | 半天班 50%、深色主题 |
+| v25 | IndexedDB 持久层：快照双写、缓存清空后自动恢复；新增 15 条 IDB 测试 |
+| v26 | 首开修复：向导必弹 / 开始前校验 / 文案大白话；默认值改为本人常用（并入 v26 基线，不单独占版本号） |
+| v26.01 | 小窗紧凑版真正生效（解析 `?mini=1`、重写 `.mini` 样式），补「回大窗」出口 |
+| v26.02 | 版本号收口：`<title>`、`.brand`、README 版本历史统一为 v26.02（此前 title/brand 停在 v26，发版不可追溯） |
 
 ---
 

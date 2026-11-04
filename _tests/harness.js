@@ -624,8 +624,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.01", "title 是 v30.01（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.01", "brand 是 v30.01（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.03", "title 是 v30.03（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.03", "brand 是 v30.03（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -633,6 +633,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
+ok(/^\| v30\.03 \|/m.test(readmeSrc), "README 版本历史有 v30.03 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1045,7 +1046,7 @@ var sumTxt = txtOf("daySummary");
 ok(sumTxt.indexOf("今天上班 7h00m") >= 0, "小结含工时 7h00m（实际：" + sumTxt + "）");
 ok(sumTxt.indexOf("¥450.57") >= 0, "小结金额与主界面一致");
 ok(Math.abs(moneyOf("todayEarn") - 450.57) < 0.01, "主界面今日已赚 ¥450.57");
-ok(new RegExp("这个月第 [0-9]+ 天").test(sumTxt) && sumTxt.indexOf("累计 ¥") >= 0, "小结含「这个月第 N 天，累计 ¥X」");
+ok(new RegExp("这个月第 [0-9]+ 个上班日").test(sumTxt) && sumTxt.indexOf("累计 ¥") >= 0, "小结含「这个月第 N 个上班日，累计 ¥X」");
 ok(!/[恭喜厉害真棒牛啊太强了]|继续加油|庆祝|撒花/.test(sumTxt + txtOf("daySummaryMore")), "无庆祝词/感叹式文案");
 ok(nodes["daySummary"].getAttribute("aria-expanded") === "false", "默认收起（aria-expanded=false）");
 ok(nodes["daySummary"].classList.contains("show") === false, "不是弹窗/遮罩（无 show 类）");
@@ -1140,6 +1141,183 @@ ok(txtOf("phaseBody").indexOf("现在值") < 0, "月薪为 0 时不再显示历�
 /* SVG 保持比例（不拉伸） */
 ok(htmlSrc.indexOf('preserveAspectRatio="none"') < 0, "SVG 不再用 preserveAspectRatio=\"none\" 拉伸");
 ok(/\.ph-svg\{width:100%;height:auto/.test(htmlSrc), "SVG 宽度自适应、高度按比例");
+
+
+/* ===== v30.02 上班日只数真上了的 ===== */
+console.log("\n=== 63. 休息日不算「本月第 N 个上班日」 ===");
+setClock("2026-11-03T18:00:00");
+store = {};
+setRecs({
+  "2026-11-01": {startMs: 1, endMs: 2, earnedMs: 27000000, earned: 450.57, rate: 64.37},
+  "2026-11-02": {type: "off"}
+});
+setSetting({salary: 9800, payDay: 15, workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00"});
+boot();
+click("btnStart");
+click("btnStop");
+var s63 = txtOf("daySummary");
+ok(/这个月第 2 个上班日/.test(s63), "3 天记录里 1 天标休息 → 显示第 2 个上班日（实际：" + s63 + "）");
+ok(s63.indexOf("¥901.14") >= 0, "累计仍按真上班的两天算（¥901.14）");
+ok(s63.indexOf("第 3 个上班日") < 0, "休息日不再被算成一天上班");
+
+
+/* ===== 64. 深色模式配色（v30.03）：CSS 解析 + WCAG 对比度 ===== */
+console.log("\n=== 64. 深色模式配色 ===");
+(function(){
+  var css = (htmlSrc.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || "";
+  function stripComments(c){ return c.replace(/\/\*[\s\S]*?\*\//g, ""); }
+  function parseRules(c){
+    var out = [], src = stripComments(c), i = 0;
+    while (i < src.length) {
+      var b = src.indexOf("{", i);
+      if (b < 0) break;
+      var sel = src.slice(i, b).trim();
+      var d = 1, j = b + 1;
+      while (j < src.length && d > 0) { if (src[j] === "{") d++; else if (src[j] === "}") d--; j++; }
+      var body = src.slice(b + 1, j - 1);
+      if (sel.indexOf("@media") === 0 || sel.indexOf("@supports") === 0) { out = out.concat(parseRules(body)); }
+      else out.push({ sel: sel, body: body });
+      i = j;
+    }
+    return out;
+  }
+  var R = parseRules(css);
+  function hexOf(v){
+    var m = String(v).match(/#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/);
+    if (!m) return null;
+    var x = m[1];
+    if (x.length === 3) x = x.replace(/./g, "$&$&");
+    return "#" + x.toUpperCase();
+  }
+  function lin(c){ c = c / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }
+  function lum(h){
+    return 0.2126 * lin(parseInt(h.slice(1,3),16)) + 0.7152 * lin(parseInt(h.slice(3,5),16)) + 0.0722 * lin(parseInt(h.slice(5,7),16));
+  }
+  function cr(a, b){ var x = lum(a), y = lum(b); var hi = Math.max(x,y), lo = Math.min(x,y); return (hi + 0.05) / (lo + 0.05); }
+
+  /* 深色 token 表（body.dark 规则里的 --x:#hex） */
+  var tokens = {};
+  R.forEach(function(r){
+    if (r.sel.trim() !== "body.dark") return;
+    var re = /--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})/g, m;
+    while ((m = re.exec(r.body))) tokens[m[1]] = hexOf(m[2]);
+  });
+  function resolve(v){
+    if (!v) return null;
+    var m = /var\(--([\w-]+)\)/.exec(v);
+    if (m && tokens[m[1]]) v = v.replace(/var\(--([\w-]+)\)/g, function(_, k){ return tokens[k] || ("var(--" + k + ")"); });
+    return v;
+  }
+  /* 取某选择器最后一段（去掉伪类/伪元素） */
+  function lastCompound(sel){
+    var t = sel.trim().split(/\s+/).pop();
+    return t.replace(/::?[a-zA-Z-]+(\([^)]*\))?/g, "");
+  }
+  /* 收集深色规则里匹配 lastCompound 的 background，解析成 {sel, val, hex} */
+  function darkBg(pred){
+    var out = [];
+    R.forEach(function(r){
+      if (r.sel.indexOf("body.dark") < 0) return;
+      r.sel.split(",").forEach(function(sel){
+        var lc = lastCompound(sel);
+        if (!pred(lc)) return;
+        var m = /background(?:-color)?\s*:\s*([^;]+)/.exec(r.body);
+        if (m) {
+          var val = resolve(m[1].trim());
+          out.push({ sel: sel.trim(), val: val, hex: hexOf(val) });
+        }
+      });
+    });
+    return out;
+  }
+  function nearWhite(list, name){
+    var bad = list.filter(function(x){ return x.hex && lum(x.hex) > 0.25; });
+    ok(bad.length === 0, "暗色 " + name + " 无近白底" + (bad.length ? "（" + bad.map(function(x){ return x.sel + "=" + x.val; }).join("; ") + "）" : ""));
+  }
+
+  /* 1) 页面/卡片层级 */
+  var cardHex = tokens["card"] || null;
+  ok(!!cardHex, "深色卡片 token --card 可解析（实际：" + cardHex + "）");
+  var pageBg = (R.filter(function(r){ return r.sel.trim() === "body.dark"; })[0] || { body: "" }).body;
+  var pageM = /background\s*:\s*([^;]+)/.exec(pageBg);
+  var pageHex = pageM ? hexOf(resolve(pageM[1])) : null;
+  ok(!!pageHex && lum(pageHex) < 0.12, "深色页面底足够暗（实际：" + pageHex + "）");
+  ok(!!cardHex && lum(cardHex) < 0.18, "深色卡片亮度 < 0.18（实际：" + (cardHex ? lum(cardHex).toFixed(3) : "-") + "）");
+
+  /* 2) 不允许纯白面：逐组件 */
+  nearWhite(darkBg(function(c){ return c === ".card"; }), ".card");
+  nearWhite(darkBg(function(c){ return c === ".chip"; }), ".chip");
+  nearWhite(darkBg(function(c){ return c === ".tag"; }), ".tag");
+  nearWhite(darkBg(function(c){ return c === ".state"; }), ".state");
+  nearWhite(darkBg(function(c){ return c === ".b-stop"; }), ".b-stop");
+  nearWhite(darkBg(function(c){ return c === ".b-ghost"; }), ".b-ghost");
+  nearWhite(darkBg(function(c){ return c === ".mini-btn"; }), ".mini-btn");
+  nearWhite(darkBg(function(c){ return c === ".mbox"; }), ".mbox");
+  nearWhite(darkBg(function(c){ return c === ".menu"; }), ".menu");
+  nearWhite(darkBg(function(c){ return c === ".d" || c.indexOf(".d.") === 0; }), "日历格");
+
+  /* 3) 主数字：实渐变，两端对卡片 ≥4.5 */
+  var moneyBg = darkBg(function(c){ return c === ".money"; });
+  var moneyVal = moneyBg.length ? moneyBg[moneyBg.length - 1].val : "";
+  var moneyHexes = (String(moneyVal).match(/#[0-9a-fA-F]{6}/g) || []).map(hexOf);
+  ok(moneyHexes.length >= 2, "暗色主数字用实渐变（实际：" + moneyVal + "）");
+  if (moneyHexes.length >= 2 && cardHex) {
+    var minCr = Math.min.apply(null, moneyHexes.map(function(h){ return cr(h, cardHex); }));
+    ok(minCr >= 4.5, "主数字两端对卡片对比 ≥4.5（实际：" + minCr.toFixed(2) + "）");
+  } else { ok(false, "主数字对比无法计算"); }
+  var zeroHex = (darkBg(function(c){ return c === ".money.zero"; })[0] || {});
+  var zeroColor = /(?:^|;)\s*color\s*:\s*([^;]+)/.exec((R.filter(function(r){ return r.sel.indexOf("body.dark .money.zero") >= 0; })[0] || { body: "" }).body);
+  var zeroCol = zeroColor ? hexOf(resolve(zeroColor[1])) : null;
+  ok(!!zeroCol && !!cardHex && cr(zeroCol, cardHex) >= 4.5, "零值金额对卡片对比 ≥4.5（实际：" + (zeroCol ? cr(zeroCol, cardHex).toFixed(2) : "-") + "）");
+
+  /* 4) 文字对比 */
+  var bodyColor = /(?:^|;)\s*color\s*:\s*var\(--txt\)/.test(pageBg) ? tokens["txt"] : null;
+  ok(!!bodyColor && !!cardHex && cr(bodyColor, cardHex) >= 4.5, "正文对卡片对比 ≥4.5（实际：" + (bodyColor ? cr(bodyColor, cardHex).toFixed(2) : "-") + "）");
+  var dimHex = tokens["dim"] || null;
+  ok(!!dimHex && !!cardHex && cr(dimHex, cardHex) >= 3.0, "次要文字对卡片对比 ≥3（实际：" + (dimHex ? cr(dimHex, cardHex).toFixed(2) : "-") + "）");
+
+  /* 5) 进度条：轨道对卡片 ≥1.25，填充对轨道 ≥3 */
+  var trackBg = darkBg(function(c){ return c === ".bar"; });
+  var trackHex = trackBg.length ? trackBg[trackBg.length - 1].hex : null;
+  ok(!!trackHex && !!cardHex && cr(trackHex, cardHex) >= 1.25, "进度轨道对卡片 ≥1.25（实际：" + (trackHex ? cr(trackHex, cardHex).toFixed(2) : "-") + "）");
+  var fillBg = darkBg(function(c){ return c === "i"; });
+  var fillHex = fillBg.length ? hexOf(fillBg[fillBg.length - 1].val) : null;
+  ok(!!fillHex && !!trackHex && cr(fillHex, trackHex) >= 3.0, "进度填充对轨道 ≥3（实际：" + (fillHex ? cr(fillHex, trackHex).toFixed(2) : "-") + "）");
+
+  /* 6) 三态徽章：文字对底色 ≥4.5 */
+  function ruleBody(sel){
+    var hit = R.filter(function(r){ return r.sel.replace(/\s+/g, " ").trim() === sel; });
+    return hit.length ? hit[hit.length - 1].body : "";
+  }
+  ["body.dark .state.on", "body.dark .state.done"].forEach(function(sel){
+    var b = ruleBody(sel);
+    var bg = /background\s*:\s*([^;]+)/.exec(b), fg = /(?:^|;)\s*color\s*:\s*([^;]+)/.exec(b);
+    var bgH = bg ? hexOf(resolve(bg[1])) : null, fgH = fg ? hexOf(resolve(fg[1])) : null;
+    ok(!!bgH && !!fgH && cr(fgH, bgH) >= 4.5, sel + " 文字对比 ≥4.5（实际：" + (bgH && fgH ? cr(fgH, bgH).toFixed(2) : "-") + "）");
+  });
+
+  /* 7) 亮色模式不回退（:root token 也要能解析） */
+  var rootTokens = {};
+  R.forEach(function(r){
+    if (r.sel.trim() !== ":root") return;
+    var re = /--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,6})/g, m;
+    while ((m = re.exec(r.body))) rootTokens[m[1]] = hexOf(m[2]);
+  });
+  function resolveRoot(v){
+    if (!v) return v;
+    return v.replace(/var\(--([\w-]+)\)/g, function(_, k){ return rootTokens[k] || ("var(--" + k + ")"); });
+  }
+  var lightCard = R.filter(function(r){ return r.sel.replace(/\s+/g, " ").trim() === ".card"; });
+  var lightCardBg = lightCard.length ? /background\s*:\s*([^;]+)/.exec(lightCard[lightCard.length - 1].body) : null;
+  var lightHex = lightCardBg ? hexOf(resolveRoot(lightCardBg[1].trim())) : null;
+  ok(!!lightHex && lum(lightHex) > 0.7, "亮色卡片仍是浅底（实际：" + lightHex + "）");
+  ok(/linear-gradient\(92deg,#1f8fe0 10%,#22c58b 90%\)/.test(css), "亮色主数字渐变原值未变");
+
+  /* 8) 内联色已挪进 CSS（深色才能覆盖） */
+  ok(htmlSrc.indexOf('id="errBar" style="display:none"') >= 0 && /#errBar\{background:#ffe1e1/.test(css), "错误条颜色在 CSS 里（不在内联 style）");
+  ok(/#actWarn\{margin:6px 0 0/.test(css), "对账提醒颜色在 CSS 里（不在内联 style）");
+  ok(/\.state::before\{content:""/.test(css), "状态徽章有圆点（不只靠颜色区分）");
+})();
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

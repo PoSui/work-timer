@@ -117,10 +117,12 @@
     Object.keys(R).forEach(function(k){
       if(k.indexOf(mk)!==0||k===todayKey()) return;
       var r=R[k]; if(!r) return;
-      sum+=(r.earned||0); days++;
+      var v=r.earned||0;
+      // v30.02：「上班日」只数真上了的（休息/带薪假等 earned 为 0 的标记不算一天）
+      if(v>0){ sum+=v; days++; }
     });
     var t=todayEarn(now);
-    if(t>0||started()||ended()||(todayRec()&&todayRec().manual)){ sum+=t; days++; }
+    if(t>0){ sum+=t; days++; }
     return {total:sum,days:days};
   }
 
@@ -358,7 +360,7 @@
       html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（'+fe.workdays+' 个工作日 × 日薪 '+money(fe.pay)+'） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-go" id="btnActFill">填入实际</button></div>';
     } else {
-      var dcls=rec.diff<0?"#c0392b":"#22a06b";
+      var dcls=rec.diff<0?"var(--bad)":"var(--ok)";
       html='<p class="gsub" style="margin:0 0 10px">满勤应得 <b>'+money(rec.estimate)+'</b> · 实际到手 <b>'+money(rec.actual)+
         '</b> · 差 <b style="color:'+dcls+'">'+signedMoney(rec.diff)+'（'+((rec.diffPct>=0)?"+":"")+Number(rec.diffPct).toFixed(1)+'%）</b></p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-ghost" id="btnActEdit">修改</button><button class="b-ghost" id="btnActHist">看历史</button></div>';
@@ -565,7 +567,7 @@
     var se=document.getElementById("resEstimate"); if(se) se.textContent=money(rec.estimate);
     var sa=document.getElementById("resActual"); if(sa) sa.textContent=money(rec.actual);
     var sd=document.getElementById("resDiff");
-    if(sd){ sd.textContent=signedMoney(rec.diff); sd.style.color=(rec.diff<0?"#c0392b":"#22a06b"); }
+    if(sd){ sd.textContent=signedMoney(rec.diff); sd.style.color=(rec.diff<0?"var(--bad)":"var(--ok)"); }
     var sc=document.getElementById("resConcl"); if(sc) sc.textContent=actualConclusion(rec,at,baseDiff,residual,ded);
     setActView("actResultView");
     var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.add("show");
@@ -573,7 +575,7 @@
   function showActualHistory(){
     var arr=ACTUALS.slice().sort(function(a,b){ return (b.at||0)-(a.at||0); }).slice(0,6);
     var html=arr.map(function(r,i){
-      var dcls=r.diff<0?"#c0392b":"#22a06b", d=new Date(r.at||0);
+      var dcls=r.diff<0?"var(--bad)":"var(--ok)", d=new Date(r.at||0);
       return '<div class="act-hrow" id="histRow'+i+'" title="点开看这期的对账结果"><span class="act-hk">'+esc(r.periodKey||"")+'</span>'+
         '<span class="act-hv">'+money(r.estimate)+' → '+money(r.actual)+'</span>'+
         '<b style="color:'+dcls+'">'+signedMoney(r.diff)+'</b>'+
@@ -690,7 +692,7 @@
   }
 
   /* ============ v30 安静的下班小结 ============ */
-  // 一行：「今天上班 7h00m，¥450.57。这个月第 12 天，累计 ¥5,412.68。」
+  // 一行：「今天上班 7h00m，¥450.57。这个月第 12 个上班日，累计 ¥5,412.68。」
   // 点一下展开今日/本月/本年三行，再点收起；无徽章、无音效、无庆祝词，不抢焦点
   function yearTotal(now){
     var y=String(new Date(now||Date.now()).getFullYear()), sum=0, days=0;
@@ -716,7 +718,7 @@
     var r=todayRec();
     if(!r||!r.endMs||started()){ hideDaySummary(); return; }
     var d=daySummaryData(todayKey(), now||Date.now()); if(!d) return;
-    line.textContent="今天上班 "+hms(d.todayMs)+"，"+money(d.todayAmt)+"。这个月第 "+d.monthDays+" 天，累计 "+money(d.monthAmt)+"。";
+    line.textContent="今天上班 "+hms(d.todayMs)+"，"+money(d.todayAmt)+"。这个月第 "+d.monthDays+" 个上班日，累计 "+money(d.monthAmt)+"。";
     more.innerHTML='<div>今日：上班 '+hms(d.todayMs)+'，'+money(d.todayAmt)+'</div>'+
       '<div>本月：第 '+d.monthDays+' 个上班日，累计 '+money(d.monthAmt)+'</div>'+
       '<div>本年：已上 '+d.yearDays+' 天，累计 '+money(d.yearAmt)+'</div>';
@@ -949,7 +951,7 @@
     document.title=(earn>0?money(earn)+" · 牛马计时器":"牛马计时器");
 
     var tag=document.getElementById("stateTag");
-    if(ended()){tag.textContent="今天已下班";tag.className="state";}
+    if(ended()){tag.textContent="今天已下班";tag.className="state done";}
     else if(started()){tag.textContent="工作中";tag.className="state on";}
     else {tag.textContent="未开始";tag.className="state";}
 

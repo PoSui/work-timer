@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v30.01</title>
+<title>牛马计时器 v30.03</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
     --blue:#1f8fe0; --green:#22c58b; --gold:#f0a02a; --deep:#0b64b0;
+    --ok:#22a06b; --bad:#c0392b; --warn:#e08a12; --accent:#1f8fe0;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   body{margin:0;background:radial-gradient(1200px 620px at 50% -12%,#dff1ff 0%,#f3f8fc 58%);
@@ -183,16 +184,114 @@
   .hbar span{position:absolute;top:-17px;font-size:10px;color:#3f6b8c;white-space:nowrap}
   .hlab{font-size:11px;color:#557792;margin-top:6px}
   .hday{font-size:10px;color:#9db0c2}
-  body.dark{background:linear-gradient(160deg,#0e1922,#132330);color:#d6e5f2}
-  body.dark .card{background:#16242f;border-color:#243545;box-shadow:0 6px 22px rgba(0,0,0,.35)}
-  body.dark h2,body.dark .num,body.dark .klab{color:#cfe2f2}
-  body.dark .sub,body.dark .gsub,body.dark .hlab,body.dark .hday,body.dark .srow .scnt{color:#8ba6bc}
-  body.dark input,body.dark select{background:#0f1b26;color:#d6e5f2;border-color:#2a3d4e}
-  body.dark .cal .d{background:#16242f;border-color:#243545}
-  body.dark .cal .d.done{background:#143a2a;border-color:#1f6b48}
-  body.dark .cal .d.off,body.dark .cal .d.hol{background:#121e28}
-  body.dark .bar{background:#1d2d3a}
-  body.dark .stat .k{color:#8ba6bc}
+  /* ===== v30.03 深色模式：token 覆盖 + 组件逐项（规格 docs/深色模式配色_v1.md） ===== */
+  body.dark{
+    --bg:#070D13; --bg2:#0D1922;
+    --card:#182633; --card2:#20323F; --card3:#293F50;
+    --line:#354C60; --line-strong:#6A8799;
+    --txt:#E8F0F7; --dim:#96ADBE;
+    --track:#4A6577; --fill:#34D399;
+    --blue:#7CC4F8; --green:#7BE495; --gold:#F5B94A; --deep:#7CC4F8;
+    --ok:#34D399; --bad:#F87171; --warn:#F5B94A; --accent:#7CC4F8;
+    background:linear-gradient(160deg,var(--bg),var(--bg2));
+    color:var(--txt)
+  }
+  body.dark .main::after{background:radial-gradient(50% 100% at 50% 0%,rgba(79,209,197,.10),transparent 70%)}
+  body.dark .card{background:var(--card);border-color:var(--line);box-shadow:0 6px 22px rgba(0,0,0,.42)}
+  body.dark .money{background:linear-gradient(92deg,#4FD1C5 10%,#7BE495 90%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  body.dark .money.zero{background:none;color:#B6C8D6;-webkit-text-fill-color:#B6C8D6}
+  body.dark .label,body.dark .chip .k{color:#96ADBE}
+  body.dark .state{background:var(--card2);border-color:#6A8799;color:#CBD5E1}
+  body.dark .state.on{background:#12352B;border-color:#3A8F6C;color:#D1FAE5}
+  body.dark .state.done{background:#12304A;border-color:#3E7FA6;color:#DBEAFE}
+  body.dark .chip{background:var(--card2);border-color:var(--line)}
+  body.dark .chip .v.blue{color:#7CC4F8}
+  body.dark .chip .v.gold{color:#F5B94A}
+  body.dark .chip .v.green{color:#7BE495}
+  body.dark .tag{background:var(--card2);border-color:var(--line);color:#96ADBE}
+  body.dark .qmark{color:#96ADBE;border-color:#354C60}
+  body.dark .chip .qmark{color:#96ADBE;border-color:#354C60}
+  body.dark .hit:focus-visible{outline-color:#5EEAD4}
+  body.dark .b-go{background:linear-gradient(92deg,#0B6FA8,#0C7F5F);box-shadow:0 8px 20px rgba(52,211,153,.18)}
+  body.dark .b-stop{background:var(--card2);border-color:var(--line);color:#B6C8D6}
+  body.dark .b-stop:hover{background:var(--card3);border-color:var(--line-strong)}
+  body.dark .b-ghost{background:transparent;border-color:var(--line-strong);color:#B6C8D6}
+  body.dark .b-ghost:hover{background:rgba(106,135,153,.14);color:var(--txt);border-color:var(--line-strong)}
+  body.dark .b-pause{background:#3A2A12;border-color:#6B5220;color:#F8D48A}
+  body.dark .mini-btn{background:var(--card2);border-color:var(--line);color:#B6C8D6}
+  body.dark .mini-btn:hover{background:var(--card3);color:var(--txt)}
+  body.dark .mini-btn.primary{background:linear-gradient(90deg,#0B6FA8,#0C7F5F);color:#fff;border:0}
+  body.dark h2,body.dark .num,body.dark .klab{color:var(--txt)}
+  body.dark .sub,body.dark .gsub,body.dark .hlab,body.dark .hday,body.dark .srow .scnt,body.dark .formula,body.dark .muted,body.dark .brand{color:#96ADBE}
+  body.dark label{color:#96ADBE}
+  body.dark input,body.dark select,body.dark .ph-in,body.dark .gform input{background:var(--card3);color:var(--txt);border-color:var(--line-strong)}
+  body.dark input::placeholder{color:#7F95A7}
+  body.dark input:focus,body.dark select:focus,body.dark .f input:focus,body.dark .f select:focus{border-color:#5EEAD4;box-shadow:0 0 0 3px rgba(94,234,212,.16)}
+  body.dark .bar{background:#4A6577;border-color:#6A8799}
+  body.dark .bar > i{background:linear-gradient(90deg,#34D399,#5EEAD4)}
+  body.dark .bar.gold > i{background:linear-gradient(90deg,#F5B94A,#FFD37A)}
+  body.dark .bar.blue > i{background:linear-gradient(90deg,#7CC4F8,#38BDF8)}
+  body.dark .bar-top{color:#B6C8D6}
+  body.dark .bar-top b{color:#E8F0F7}
+  body.dark #dayLeft{color:#F5B94A}
+  body.dark .cal .d{background:var(--card);border-color:#2A3D4E}
+  body.dark .cal .d .n{color:#B6C8D6}
+  body.dark .cal .d.done{background:#12352B;border-color:#3A8F6C}
+  body.dark .cal .d.done .n{color:#D1FAE5}
+  body.dark .cal .d.offday,body.dark .cal .d.off,body.dark .cal .d.hol{background:#111B24;border-color:#1E2F3B}
+  body.dark .cal .d.offday .n,body.dark .cal .d.off .n,body.dark .cal .d.hol .n{color:#5E7385}
+  body.dark .cal .d.holiday{background:#2A1D22;border-color:#4A2C33}
+  body.dark .cal .d.holiday .n{color:#F2A7A7}
+  body.dark .cal .d.makeup{background:#1F2F3D;border-color:var(--line)}
+  body.dark .cal .d.out{background:#111B24;border-color:#1E2F3B}
+  body.dark .cal .d.out .n{color:#5E7385}
+  body.dark .cal .d.future{background:#141F29;border-color:#24384A}
+  body.dark .cal .d.future .n{color:#7F95A7}
+  body.dark .cal .d.today{border-color:#5EEAD4;box-shadow:0 0 0 2px rgba(94,234,212,.25)}
+  body.dark .cal .d.today .n{color:#E8F0F7}
+  body.dark .cal .d.weekend .n{color:#E8A0A0}
+  body.dark .cal .d .e{color:#7BE495}
+  body.dark .cal .d.est .e{color:#96ADBE}
+  body.dark .cal .d .h,body.dark .cal .wd{color:#96ADBE}
+  body.dark .cal .d .tg{color:#F2A7A7}
+  body.dark .cal .d .tg.ban{color:#D6C08A}
+  body.dark .cal .d .fes,body.dark .cal .d .typ{color:#F2A7A7}
+  body.dark .maxh::-webkit-scrollbar-thumb{background:#354C60}
+  body.dark .modal{background:rgba(3,9,14,.66)}
+  body.dark .mbox{background:var(--card);border-color:var(--line);box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  body.dark .mbox h3{color:var(--txt)}
+  body.dark .mbox p{color:#B6C8D6}
+  body.dark .menu{background:var(--card2);border-color:var(--line-strong);box-shadow:0 10px 30px rgba(0,0,0,.45)}
+  body.dark .menu button{color:var(--txt)}
+  body.dark .menu button:hover{background:var(--card3)}
+  body.dark .menu .menu-h{color:#96ADBE}
+  body.dark #sheetMask{background:rgba(3,9,14,.66)}
+  body.dark #sheet{background:#121C26;color:#D3E0EA}
+  body.dark .sheet-grab{background:#4A6577}
+  body.dark #sheetTitle{color:#E8F0F7}
+  body.dark .s-kicker,body.dark .s-note{color:#A3B7C7}
+  body.dark .s-big{color:#7CC4F8}
+  body.dark .s-sec{border-top-color:#2E4356}
+  body.dark .s-line{color:#D3E0EA}
+  body.dark .act-arow,body.dark .act-hrow{color:#B6C8D6;border-bottom-color:#24384A}
+  body.dark .act-arow.act-conv,body.dark .act-hk,body.dark .act-hp,body.dark .act-hd{color:#96ADBE}
+  body.dark .act3>div{background:var(--card2);border-color:var(--line)}
+  body.dark .act3 span{color:#96ADBE}
+  body.dark .act3 b{color:var(--txt)}
+  body.dark #actWarn{background:#3A2A12;border-color:#6B5220;color:#F8D48A}
+  body.dark #errBar{background:#3A1D22;border-color:#6B343C;color:#FFC9C9}
+  body.dark .day-sum{color:#B6C8D6;border-top-color:#2E4356}
+  body.dark .day-sum-more{color:#96ADBE}
+  body.dark #phaseCard summary{color:var(--txt)}
+  body.dark .ph-line{stroke:#5EEAD4}
+  body.dark .ph-dot{fill:#7BE495}
+  body.dark .ph-lab{fill:#96ADBE}
+  body.dark .ph-sent{color:#D3E0EA}
+  body.dark .medal{color:#F5B94A}
+  body.dark .hbar{background:linear-gradient(180deg,#7CC4F8,#34D399)}
+  body.dark .hbar span{color:#B6C8D6}
+  body.dark .stat .k{color:#96ADBE}
+  body.dark.mini{background:var(--bg)}
 
   /* v28 口径抽屉 */
   .hit{cursor:pointer}
@@ -238,14 +337,18 @@
   .day-sum-more{font-size:12px;color:#5b7285;line-height:1.75;padding:6px 0 0}
   body.dark .day-sum{color:#cfe0ee;border-top-color:#2b3d4d}
   body.dark .day-sum-more{color:#8fa6b8}
+  /* 错误条 / 对账提醒：颜色放这里（v30.03，原先写在内联 style 里深色覆盖不了） */
+  #errBar{background:#ffe1e1;border:1px solid #ffb3b3;color:#a12020;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:12px;line-height:1.6}
+  #actWarn{margin:6px 0 0;padding:8px 10px;border-radius:10px;background:#fff7e6;border:1px solid #ffe1a8;color:#a15c00;font-size:12.5px;line-height:1.6}
+  .state::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px;opacity:.95}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <div id="errBar" style="display:none;background:#ffe1e1;border:1px solid #ffb3b3;color:#a12020;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:12px;line-height:1.6"></div>
+  <div id="errBar" style="display:none"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v30.01</div>
+    <div class="brand">牛马计时器 · v30.03</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -433,7 +536,7 @@
         <div><span>实际到手</span><b id="resActual">¥0.00</b></div>
         <div><span>差额</span><b id="resDiff">¥0.00</b></div>
       </div>
-      <div id="actWarn" style="display:none;margin:6px 0 0;padding:8px 10px;border-radius:10px;background:#fff7e6;border:1px solid #ffe1a8;color:#a15c00;font-size:12.5px;line-height:1.6"></div>
+      <div id="actWarn" style="display:none"></div>
       <div id="resAttr"></div>
       <p id="resConcl" class="gsub"></p>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px">
@@ -596,10 +699,12 @@
     Object.keys(R).forEach(function(k){
       if(k.indexOf(mk)!==0||k===todayKey()) return;
       var r=R[k]; if(!r) return;
-      sum+=(r.earned||0); days++;
+      var v=r.earned||0;
+      // v30.02：「上班日」只数真上了的（休息/带薪假等 earned 为 0 的标记不算一天）
+      if(v>0){ sum+=v; days++; }
     });
     var t=todayEarn(now);
-    if(t>0||started()||ended()||(todayRec()&&todayRec().manual)){ sum+=t; days++; }
+    if(t>0){ sum+=t; days++; }
     return {total:sum,days:days};
   }
 
@@ -837,7 +942,7 @@
       html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（'+fe.workdays+' 个工作日 × 日薪 '+money(fe.pay)+'） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-go" id="btnActFill">填入实际</button></div>';
     } else {
-      var dcls=rec.diff<0?"#c0392b":"#22a06b";
+      var dcls=rec.diff<0?"var(--bad)":"var(--ok)";
       html='<p class="gsub" style="margin:0 0 10px">满勤应得 <b>'+money(rec.estimate)+'</b> · 实际到手 <b>'+money(rec.actual)+
         '</b> · 差 <b style="color:'+dcls+'">'+signedMoney(rec.diff)+'（'+((rec.diffPct>=0)?"+":"")+Number(rec.diffPct).toFixed(1)+'%）</b></p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-ghost" id="btnActEdit">修改</button><button class="b-ghost" id="btnActHist">看历史</button></div>';
@@ -1044,7 +1149,7 @@
     var se=document.getElementById("resEstimate"); if(se) se.textContent=money(rec.estimate);
     var sa=document.getElementById("resActual"); if(sa) sa.textContent=money(rec.actual);
     var sd=document.getElementById("resDiff");
-    if(sd){ sd.textContent=signedMoney(rec.diff); sd.style.color=(rec.diff<0?"#c0392b":"#22a06b"); }
+    if(sd){ sd.textContent=signedMoney(rec.diff); sd.style.color=(rec.diff<0?"var(--bad)":"var(--ok)"); }
     var sc=document.getElementById("resConcl"); if(sc) sc.textContent=actualConclusion(rec,at,baseDiff,residual,ded);
     setActView("actResultView");
     var m=document.getElementById("actualModal"); if(m&&m.classList) m.classList.add("show");
@@ -1052,7 +1157,7 @@
   function showActualHistory(){
     var arr=ACTUALS.slice().sort(function(a,b){ return (b.at||0)-(a.at||0); }).slice(0,6);
     var html=arr.map(function(r,i){
-      var dcls=r.diff<0?"#c0392b":"#22a06b", d=new Date(r.at||0);
+      var dcls=r.diff<0?"var(--bad)":"var(--ok)", d=new Date(r.at||0);
       return '<div class="act-hrow" id="histRow'+i+'" title="点开看这期的对账结果"><span class="act-hk">'+esc(r.periodKey||"")+'</span>'+
         '<span class="act-hv">'+money(r.estimate)+' → '+money(r.actual)+'</span>'+
         '<b style="color:'+dcls+'">'+signedMoney(r.diff)+'</b>'+
@@ -1169,7 +1274,7 @@
   }
 
   /* ============ v30 安静的下班小结 ============ */
-  // 一行：「今天上班 7h00m，¥450.57。这个月第 12 天，累计 ¥5,412.68。」
+  // 一行：「今天上班 7h00m，¥450.57。这个月第 12 个上班日，累计 ¥5,412.68。」
   // 点一下展开今日/本月/本年三行，再点收起；无徽章、无音效、无庆祝词，不抢焦点
   function yearTotal(now){
     var y=String(new Date(now||Date.now()).getFullYear()), sum=0, days=0;
@@ -1195,7 +1300,7 @@
     var r=todayRec();
     if(!r||!r.endMs||started()){ hideDaySummary(); return; }
     var d=daySummaryData(todayKey(), now||Date.now()); if(!d) return;
-    line.textContent="今天上班 "+hms(d.todayMs)+"，"+money(d.todayAmt)+"。这个月第 "+d.monthDays+" 天，累计 "+money(d.monthAmt)+"。";
+    line.textContent="今天上班 "+hms(d.todayMs)+"，"+money(d.todayAmt)+"。这个月第 "+d.monthDays+" 个上班日，累计 "+money(d.monthAmt)+"。";
     more.innerHTML='<div>今日：上班 '+hms(d.todayMs)+'，'+money(d.todayAmt)+'</div>'+
       '<div>本月：第 '+d.monthDays+' 个上班日，累计 '+money(d.monthAmt)+'</div>'+
       '<div>本年：已上 '+d.yearDays+' 天，累计 '+money(d.yearAmt)+'</div>';
@@ -1428,7 +1533,7 @@
     document.title=(earn>0?money(earn)+" · 牛马计时器":"牛马计时器");
 
     var tag=document.getElementById("stateTag");
-    if(ended()){tag.textContent="今天已下班";tag.className="state";}
+    if(ended()){tag.textContent="今天已下班";tag.className="state done";}
     else if(started()){tag.textContent="工作中";tag.className="state on";}
     else {tag.textContent="未开始";tag.className="state";}
 

@@ -25,6 +25,9 @@ function makeEl(id) {
       toggle(c,on){on===undefined?(this._s.has(c)?this._s.delete(c):this._s.add(c)):(on?this._s.add(c):this._s.delete(c));},
       contains(c){return this._s.has(c);} },
     addEventListener(ev, fn) { (listeners[id] = listeners[id] || {})[ev] = fn; },
+    _attrs: {},
+    setAttribute(k, v) { this._attrs[k] = String(v); },
+    getAttribute(k) { return (k in this._attrs) ? this._attrs[k] : null; },
     appendChild(c) { this._html += (c && (c._html || "")) || ""; },
     click() { const h = listeners[id] && listeners[id].click; if (h) h({ preventDefault() {} }); },
     getBoundingClientRect() { return { width: 0, height: 0 }; }
@@ -67,10 +70,11 @@ function clickCell(k, type, mul) {
 }
 
 let promptQueue = [];
-global.prompt = () => (promptQueue.length ? promptQueue.shift() : null);
+let promptCount = 0;
+global.prompt = () => { promptCount++; return (promptQueue.length ? promptQueue.shift() : null); };
 
 function boot() {
-  timers = []; listeners = {}; alerts = []; blobs = [];
+  timers = []; listeners = {}; alerts = []; blobs = []; promptCount = 0;
   Object.keys(nodes).forEach(k => { nodes[k]._html = ""; nodes[k].textContent = ""; nodes[k].style = {}; nodes[k].classList._s.clear(); });
   eval(APP);
 }
@@ -321,16 +325,14 @@ clickCell("2026-10-14", "off");
 ok(recs()["2026-10-14"] && recs()["2026-10-14"].type === "off", "工作日可以标记休息");
 near(moneyOf("monthEarn"), before27 - 2 * DAYPAY, 2.0, "标记两天休息后本期减两天");
 
-/* 28 存档需确认；取消则不存档 */
-console.log("=== 28. 存档前确认 ===");
+/* 28 存档不再弹确认（v30 安静存档） */
+console.log("=== 28. 存档无需确认（安静存档）===");
 setClock("2026-11-03T10:00:00"); setRecs({}); setSetting({ salary: 9800, payDay: 15 }); boot();
 click("btnStart");
-global.confirm = () => false;
+var alerts28 = alerts.length;
 click("btnStop");
-ok(nodes["stateTag"].textContent === "工作中", "取消后仍工作中");
-global.confirm = () => true;
-click("btnStop");
-ok(nodes["stateTag"].textContent === "今天已下班", "确认后正常存档");
+ok(alerts28 === alerts.length, "点「下班存档」不弹 alert");
+ok(nodes["stateTag"].textContent === "今天已下班", "直接存档成功（无确认框）");
 
 /* 29 日历“休/调”标注 */
 console.log("=== 29. 日历 休/调 标注 ===");
@@ -622,13 +624,15 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v29", "title 是 v29（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v29", "brand 是 v29（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.01", "title 是 v30.01（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.01", "brand 是 v30.01（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
 ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
+ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
+ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1015,14 +1019,127 @@ ok(txtOf("phaseBody").indexOf("¥525.45") >= 0, "编辑后「同样 8 小时」�
 ok((nodes["phaseBody"].innerHTML.match(/class="ph-dot"/g) || []).length === 2, "编辑后曲线点数仍与阶段数一致");
 
 click("btnPhaseAdd");
-ok(phases().length === 3, "点「+ 添加一段」新增阶段（实际 " + phases().length + " 段）");
-click("btnPhDel2");
-ok(phases().length === 2, "点「删」删除该阶段（实际 " + phases().length + " 段）");
+ok(phases().length === 2, "同月点「+ 添加一段」→ 覆盖末段、不新增（实际 " + phases().length + " 段）");
+ok(+phases()[1].hours === 7, "覆盖后 hours 取当前设置算出的 7（不是 8）（实际 " + phases()[1].hours + "）");
+click("btnPhDel1");
+ok(phases().length === 1, "点「删」删除该阶段（实际 " + phases().length + " 段）");
 
 /* 存储 + IDB 快照 */
-ok(JSON.parse(store[KEY_PHASES] || "[]").length === 2, "阶段写入 localStorage niuma.phases.v1");
+ok(JSON.parse(store[KEY_PHASES] || "[]").length === 1, "阶段写入 localStorage niuma.phases.v1");
 var snapP = window.__niuma.IDB.snapshot();
-ok(Array.isArray(snapP.phases) && snapP.phases.length === 2, "IDB 快照含 phases（实际 " + (snapP.phases ? snapP.phases.length : "无") + "）");
+ok(Array.isArray(snapP.phases) && snapP.phases.length === 1, "IDB 快照含 phases（实际 " + (snapP.phases ? snapP.phases.length : "无") + "）");
+
+
+/* ===== v30 安静的下班小结 ===== */
+console.log("\n=== 61. 安静的下班小结 ===");
+setClock("2026-11-03T18:00:00");
+store = {}; setRecs({});
+setSetting({salary: 9800, payDay: 15, workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00"});
+boot();
+click("btnStart");
+var al61 = alerts.length, pr61 = promptCount;
+click("btnStop");
+ok(alerts.length === al61 && promptCount === pr61, "存档过程无 alert / prompt 弹窗");
+ok(nodes["daySummary"].style.display !== "none", "存档后页面出现一行小结（不是弹窗）");
+var sumTxt = txtOf("daySummary");
+ok(sumTxt.indexOf("今天上班 7h00m") >= 0, "小结含工时 7h00m（实际：" + sumTxt + "）");
+ok(sumTxt.indexOf("¥450.57") >= 0, "小结金额与主界面一致");
+ok(Math.abs(moneyOf("todayEarn") - 450.57) < 0.01, "主界面今日已赚 ¥450.57");
+ok(new RegExp("这个月第 [0-9]+ 天").test(sumTxt) && sumTxt.indexOf("累计 ¥") >= 0, "小结含「这个月第 N 天，累计 ¥X」");
+ok(!/[恭喜厉害真棒牛啊太强了]|继续加油|庆祝|撒花/.test(sumTxt + txtOf("daySummaryMore")), "无庆祝词/感叹式文案");
+ok(nodes["daySummary"].getAttribute("aria-expanded") === "false", "默认收起（aria-expanded=false）");
+ok(nodes["daySummary"].classList.contains("show") === false, "不是弹窗/遮罩（无 show 类）");
+
+click("daySummary");
+var more = txtOf("daySummaryMore");
+ok(nodes["daySummaryMore"].style.display === "block", "点一下展开细节");
+ok(more.indexOf("今日") >= 0 && more.indexOf("本月") >= 0 && more.indexOf("本年") >= 0, "展开含今日/本月/本年三行");
+ok(nodes["daySummary"].getAttribute("aria-expanded") === "true", "展开后 aria-expanded=true");
+click("daySummary");
+ok(nodes["daySummaryMore"].style.display === "none", "再点收起");
+ok(nodes["daySummary"].getAttribute("aria-expanded") === "false", "收起后 aria-expanded=false");
+
+/* 刷新后仍在；重新开始计时后隐藏 */
+boot();
+ok(nodes["daySummary"].style.display !== "none", "刷新后（今天已存档）小结仍在");
+ok(txtOf("daySummary").indexOf("¥450.57") >= 0, "刷新后小结金额仍一致");
+click("btnRestart");
+ok(nodes["daySummary"].style.display === "none", "点「继续计时」后小结隐藏（回到计时态）");
+
+/* P3-a：时薪抽屉措辞与对账口径一致 */
+click("chipRate");
+var rateNote = txtOf("sheetBody");
+ok(rateNote.indexOf("满勤应得") >= 0, "时薪抽屉说明提到对账用的「满勤应得」口径");
+ok(rateNote.indexOf("几十元偏差") < 0, "不再说「月末对账可能有几十元偏差」");
+click("sheetClose");
+
+/* P3-b：抵消场景明细合并成一行 */
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27({"2026-10-21":{type:"off"}, "2026-10-23":{type:"ot", mul:2}});
+actFill(firstMoney("actualBody"));
+var a61 = nodes["resAttr"].innerHTML;
+ok(/基本抵消/.test(a61), "休息/加班抵消时明细合并标注「基本抵消」");
+ok((a61.match(/class="act-arow/g) || []).length <= 3, "抵消场景不再逐条分行堆数字");
+
+/* P3-c：高代扣不误报「只发了一部分」 */
+setClock("2026-11-03T15:45:00"); store = {};
+fresh27(null);
+click("btnActFill");
+nodes["actAmount"].value = "3000";
+nodes["actSocial"].value = "1500";
+nodes["actHousing"].value = "400";
+click("btnActSave");
+ok(nodes["actWarn"].style.display === "none", "代扣很高（实发 ¥3000、代扣 ¥1900）时不误报「只发一部分」");
+
+
+/* ===== v30.01 阶段修复 + P3 ===== */
+console.log("\n=== 62. 时薪阶段修复（首启工时/同月覆盖/单段文案）===");
+fresh27(null);
+ok(phases().length === 1, "首启只有 1 段初始阶段");
+ok(+phases()[0].hours === 7, "首启阶段 hours = paidHours() = 7（不是 undefined→8）（实际 " + phases()[0].hours + "）");
+click("btnPhaseAdd");
+ok(phases().length === 1, "首启点「+ 添加一段」同月覆盖、不新增（实际 " + phases().length + " 段）");
+ok(+phases()[0].hours === 7, "添加后 hours 仍是 7（实际 " + phases()[0].hours + "）");
+ok(txtOf("phaseBody").indexOf("¥64.37") >= 0, "添加后时薪仍是 ¥64.37（不是 56.32）");
+ok(txtOf("phaseBody").indexOf("目前只有一段记录") >= 0, "只有一段时文案正确（不再误报）");
+click("btnPhaseAdd");
+ok(phases().length === 1, "同月重复添加仍不新增（实际 " + phases().length + " 段）");
+
+/* 同月多段时不得说「只有一段记录」 */
+seedPhases([
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 7},
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 8}
+]);
+boot();
+ok(txtOf("phaseBody").indexOf("只有一段记录") < 0, "同月 2 段时不再误报「只有一段记录」");
+ok(txtOf("phaseBody").indexOf("2 段阶段") >= 0, "同月多段文案写明段数");
+
+/* 非法月份拒绝写入；合法乱序按月份排序 */
+seedPhases([
+  {from: "2024-01", salary: 7000, days: 21.75, hours: 8},
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 7}
+]);
+boot();
+nodes["phMonth0"].value = "2026-13";
+listeners["phMonth0"].change({});
+ok(phases()[0].from === "2024-01" && phases().length === 2, "非法月份 2026-13 被拒绝，不写入（实际 " + phases()[0].from + "）");
+nodes["phMonth1"].value = "2023-05";
+listeners["phMonth1"].change({});
+ok(phases()[0].from === "2023-05", "合法但乱序的月份按时间排序（实际首段 " + phases()[0].from + "）");
+
+/* 月薪为 0：不再拿历史时薪冒充「现在值」 */
+seedPhases([
+  {from: "2024-01", salary: 7000, days: 21.75, hours: 8},
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 7}
+]);
+setSetting({salary: 0});
+boot();
+ok(txtOf("phaseBody").indexOf("还没填月薪") >= 0, "月薪为 0 时提示先填月薪");
+ok(txtOf("phaseBody").indexOf("现在值") < 0, "月薪为 0 时不再显示历史「现在值」");
+
+/* SVG 保持比例（不拉伸） */
+ok(htmlSrc.indexOf('preserveAspectRatio="none"') < 0, "SVG 不再用 preserveAspectRatio=\"none\" 拉伸");
+ok(/\.ph-svg\{width:100%;height:auto/.test(htmlSrc), "SVG 宽度自适应、高度按比例");
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

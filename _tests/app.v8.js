@@ -404,6 +404,10 @@
     return "加班 "+x.n+" 天（1.5/2/3 倍）";
   }
   // v28.02：快照 → 归因对象（重开旧账时不再调用 actualAttribution，避免月薪/作息变化改写历史说法）
+  function attrShort(x){
+    var t={sick:"病假",off:"休息",paid:"带薪假",half:"半天班",p80:"出勤 80%",ot:"加班"}[x.key]||"其他";
+    return t+" "+x.n+" 天";
+  }
   function snapshotToAttr(rec){
     var all=(rec.impactSnapshot||[]).map(function(x){ return {key:x.type, n:x.days, impact:x.impact}; });
     all.sort(function(a,b){ return Math.abs(b.impact)-Math.abs(a.impact); });
@@ -515,7 +519,32 @@
     var expectedNet=rec.estimate-ded;
     var baseDiff=ded>0?(rec.actual-expectedNet):rec.diff;
     var residual=baseDiff-sumImp;
-    var html=at.all.slice(0,3).map(function(x){
+    // v30：正负基本对等的项（休息 vs 加班）明细合并一行，避免「结论说抵消、明细还分行」
+    var shown=at.all.slice(0,3);
+    var work=shown.map(function(x){ return {key:x.key,n:x.n,impact:x.impact,left:x.impact}; });
+    var pos=work.filter(function(x){ return x.left>0; }), neg=work.filter(function(x){ return x.left<0; });
+    pos.forEach(function(p){
+      neg.forEach(function(q){
+        if(p.left<0.005||q.left>-0.005) return;
+        var m=Math.min(p.left,-q.left);
+        if(m<0.9*Math.min(p.left,-q.left)) return;
+        p.left-=m; q.left+=m;
+      });
+    });
+    var cancelled=[];
+    work.forEach(function(x){ if(Math.abs(x.impact)>=0.005 && Math.abs(x.left)<0.005) cancelled.push(x); });
+    var mergedIn=false;
+    var html=work.map(function(x){
+      if(cancelled.indexOf(x)>=0){
+        if(mergedIn) return "";
+        mergedIn=true;
+        var net=cancelled.reduce(function(a,y){ return a+y.impact; },0);
+        return '<div class="act-arow act-merged">'+esc(cancelled.map(attrShort).join(" / "))+'（净 '+(Math.abs(net)<0.005?"¥0.00":signedMoney(net))+'，基本抵消）</div>';
+      }
+      if(Math.abs(x.left)<0.005 && Math.abs(x.impact)>=0.005){
+        // 被抵消但未归入 cancelled（例如只部分抵消）：仍显示剩余影响
+        return '<div class="act-arow">'+esc(attrLabel(x))+' <b>'+(Math.abs(x.left)<0.005?"基本抵消":signedMoney(x.left))+'</b></div>';
+      }
       return '<div class="act-arow">'+esc(attrLabel(x))+' <b>'+(x.impact===0?"¥0.00":signedMoney(x.impact))+'</b></div>';
     }).join("");
     html+='<div class="act-arow act-conv">差额基准：满勤应得 '+money(rec.estimate)+'（当月 '+at.workdays+' 个工作日 × 日薪 '+money(payShown)+'）；病假/休息/加班是相对满勤的增减。</div>';
@@ -523,11 +552,13 @@
     if(ded>0) html+='<div class="act-arow act-conv">已填社保/公积金/个税共 '+money(ded)+'，扣后应约 '+money(expectedNet)+'；与实发相差 '+signedMoney(rec.actual-expectedNet)+'。</div>';
     var attr=document.getElementById("resAttr"); if(attr) attr.innerHTML=html;
 
+    // v30：先扣掉用户自己填的代扣再判断，避免「代扣很高」被误报成「只发了一部分」
     var warn=document.getElementById("actWarn"), warnTxt="";
+    var expectNet=rec.estimate-ded;
     if(rec.estimate>0&&rec.actual>rec.estimate*3){
       warnTxt="实发 "+money(rec.actual)+" 是满勤应得（"+money(rec.estimate)+"）的 "+Math.round(rec.actual/rec.estimate)+" 倍，偏差 "+Number(rec.diffPct).toFixed(0)+"%。可能多打了一位，建议先核对，确认无误再保存。";
-    } else if(rec.estimate>0&&rec.actual>0&&rec.actual<rec.estimate*0.3){
-      warnTxt="实发 "+money(rec.actual)+" 不到满勤应得（"+money(rec.estimate)+"）的三成，偏差 "+Number(rec.diffPct).toFixed(0)+"%。如果只发了半个月或一部分，可以在备注里写明。";
+    } else if(expectNet>0&&rec.actual>0&&rec.actual<expectNet*0.3){
+      warnTxt="实发 "+money(rec.actual)+" 低于「满勤应得 − 已填代扣」("+money(expectNet)+") 的三成，偏差 "+Number(rec.diffPct).toFixed(0)+"%。如果只发了半个月或一部分，可以在备注里写明；若代扣还没填全，也可以先补上。";
     }
     if(warn){ warn.textContent=warnTxt; warn.style.display=warnTxt?"block":"none"; }
 
@@ -612,7 +643,7 @@
     var l1="折合月薪 "+money(monthlyPay())+" ÷ "+num(days)+" 天 ÷ "+num(hh)+" 小时 = "+money(hourly());
     var l2="日薪 "+money(dailyPay())+" = 折合月薪 "+money(monthlyPay())+" ÷ "+num(days)+" 天";
     return head+'<div class="s-sec">'+sheetLine(l1)+sheetLine(l2)+'</div>'
-      +sheetNote("说明：21.75 是月均计薪天数（(365−104)/12），当月实际工作日会多几天，所以月末对账可能有几十元偏差；可在月末对账里校准。不含个税与社保（本工具只按到手口径估算）。");
+      +sheetNote("说明：21.75 是月均计薪天数（(365−104)/12），日薪 = 月薪 ÷ 21.75；月末对账的「满勤应得」= 当月已过工作日 × 日薪，和这里同一口径，差别只在当月实际工作日数与 21.75 的多少。不含个税与社保（本工具只按到手口径估算）。");
   }
   // 本期已赚：总额走 periodTotal，分类型走 periodGroups（两者同用 dayValue）
   function sheetPeriod(now){
@@ -658,6 +689,59 @@
     openSheet(kind);
   }
 
+  /* ============ v30 安静的下班小结 ============ */
+  // 一行：「今天上班 7h00m，¥450.57。这个月第 12 天，累计 ¥5,412.68。」
+  // 点一下展开今日/本月/本年三行，再点收起；无徽章、无音效、无庆祝词，不抢焦点
+  function yearTotal(now){
+    var y=String(new Date(now||Date.now()).getFullYear()), sum=0, days=0;
+    Object.keys(R).forEach(function(k){
+      if(k.indexOf(y)!==0) return;
+      var v=(R[k]||{}).earned||0;
+      if(v>0){ sum+=v; days++; }
+    });
+    return {total:sum, days:days};
+  }
+  function daySummaryData(k,now){
+    var r=R[k]; if(!r||!r.endMs) return null;
+    var mt=monthTotal(now), yt=yearTotal(now);
+    return {
+      todayMs:r.earnedMs||0, todayAmt:r.earned||0,
+      monthDays:mt.days, monthAmt:mt.total,
+      yearDays:yt.days, yearAmt:yt.total
+    };
+  }
+  function updateDaySummary(now){
+    var line=document.getElementById("daySummary"), more=document.getElementById("daySummaryMore");
+    if(!line||!more) return;
+    var r=todayRec();
+    if(!r||!r.endMs||started()){ hideDaySummary(); return; }
+    var d=daySummaryData(todayKey(), now||Date.now()); if(!d) return;
+    line.textContent="今天上班 "+hms(d.todayMs)+"，"+money(d.todayAmt)+"。这个月第 "+d.monthDays+" 天，累计 "+money(d.monthAmt)+"。";
+    more.innerHTML='<div>今日：上班 '+hms(d.todayMs)+'，'+money(d.todayAmt)+'</div>'+
+      '<div>本月：第 '+d.monthDays+' 个上班日，累计 '+money(d.monthAmt)+'</div>'+
+      '<div>本年：已上 '+d.yearDays+' 天，累计 '+money(d.yearAmt)+'</div>';
+    line.style.display="";
+    line.setAttribute("aria-expanded", more.style.display==="block"?"true":"false");
+  }
+  function hideDaySummary(){
+    var line=document.getElementById("daySummary"), more=document.getElementById("daySummaryMore");
+    if(line){ line.style.display="none"; line.setAttribute("aria-expanded","false"); }
+    if(more) more.style.display="none";
+  }
+  function showDaySummary(k,now){
+    var r=R[k]; if(!r||!r.endMs) return;
+    var line=document.getElementById("daySummary"); if(!line) return;
+    updateDaySummary(now);
+    line.style.display="";
+  }
+  function toggleDaySummary(){
+    var line=document.getElementById("daySummary"), more=document.getElementById("daySummaryMore");
+    if(!line||!more||line.style.display==="none") return;
+    var open=more.style.display==="block";
+    more.style.display=open?"none":"block";
+    line.setAttribute("aria-expanded", open?"false":"true");
+  }
+
   /* ============ v29 时薪轨迹 ============ */
   function monthKeyOf(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1); }
   function monthIdx(mk){ var a=String(mk||"").split("-"); return (+a[0]||0)*12+((+a[1]||1)-1); }
@@ -686,15 +770,29 @@
     if(!PHASES.length) return [];
     var fs=PHASES[0], ls=PHASES[PHASES.length-1], a=hourlyOfPhase(fs), b=hourlyOfPhase(ls);
     var out=[];
+    // v30.01：当前月薪为 0 时不能拿最后一段的历史时薪冒充「现在值」
+    if(!(monthlyPay()>0)) return ["现在还没填月薪：先在设置里填上，才知道现在的时薪。下面是历史阶段，按当时的记录显示。"];
     var mv=monthIdx(ls.from)-monthIdx(fs.from);
     if(!(a>0&&b>0)) return ["时薪数据还没填全，先在下面的阶段里补上限月薪即可。"];
     var pct=(b-a)/a*100, apct=Math.round(Math.abs(pct));
-    if(mv<=0){ out.push("目前只有一段记录：从 "+fs.from+" 起，时薪 "+money(a)+"。"); }
+    if(mv<=0){
+      // v30.01：按「阶段数」判断，不按月份——同月多段时不再误报「只有一段记录」
+      out.push(PHASES.length<=1
+        ? ("目前只有一段记录：从 "+fs.from+" 起，时薪 "+money(a)+"。")
+        : ("目前 "+PHASES.length+" 段阶段都在 "+fs.from+" 附近：时薪 "+money(a)+" → "+money(b)+"。"));
+    }
     else if(Math.abs(pct)<5){ out.push("这 "+mv+" 个月时薪基本没动（"+money(a)+" → "+money(b)+"，"+apct+"%）。"); }
     else if(pct<0){ out.push("从 "+fs.from+" 到 "+ls.from+"，时薪降了 "+apct+"%（"+money(a)+" → "+money(b)+"）。"); }
     else { out.push("从 "+fs.from+" 到 "+ls.from+"，时薪涨了 "+apct+"%（"+money(a)+" → "+money(b)+"）。"); }
     out.push("同样 8 小时："+fs.from+" 时值 "+money(a*8)+"，现在值 "+money(b*8)+"。");
     return out;
+  }
+  function sortPhases(arr){
+    return arr.slice().sort(function(x,y){
+      var d=monthIdx(x.from)-monthIdx(y.from);
+      if(d) return d;
+      return (x.salary||0)-(y.salary||0);
+    });
   }
   function phaseChartSvg(){
     var n=PHASES.length, W=300, H=118, minH=1e9, maxH=-1e9, hs=[];
@@ -704,7 +802,7 @@
     function X(i){ return n===1?((x0+x1)/2):(x0+(x1-x0)*i/(n-1)); }
     function Y(h){ return y1-(h-minH)/span*(y1-y0); }
     var pts=hs.map(function(h,i){ return X(i).toFixed(1)+","+Y(h).toFixed(1); }).join(" ");
-    var g='<svg class="ph-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="时薪轨迹折线图" preserveAspectRatio="none">';
+    var g='<svg class="ph-svg" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="时薪轨迹折线图">';
     g+='<polyline class="ph-line" points="'+pts+'" fill="none" stroke-width="2"/>';
     hs.forEach(function(h,i){
       g+='<circle class="ph-dot" cx="'+X(i).toFixed(1)+'" cy="'+Y(h).toFixed(1)+'" r="3"></circle>';
@@ -738,11 +836,14 @@
         var el=document.getElementById(pre+i);
         if(el) el.addEventListener("change",function(){
           var arr=JSON.parse(JSON.stringify(PHASES)), q=arr[i];
-          q.from=String((document.getElementById("phMonth"+i)||{}).value||q.from).trim();
+          var from=String((document.getElementById("phMonth"+i)||{}).value||q.from).trim();
+          // v30.01：月份必须是 YYYY-MM，非法（如 2026-13）拒绝写入并恢复显示
+          if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(from)){ renderPhase(now); return; }
+          q.from=from;
           q.salary=parseFloat((document.getElementById("phSalary"+i)||{}).value)||0;
           q.note=String((document.getElementById("phNote"+i)||{}).value||"");
-          q.days=+q.days||21.75; q.hours=+q.hours||8;
-          PHASES=arr; savePhases(); renderPhase(now);
+          q.days=+q.days||21.75; q.hours=+q.hours||paidHours()||8;
+          PHASES=sortPhases(arr); savePhases(); renderPhase(now);
         });
       });
       var del=document.getElementById("btnPhDel"+i);
@@ -754,8 +855,15 @@
     });
     var add=document.getElementById("btnPhaseAdd");
     if(add) add.addEventListener("click",function(){
-      PHASES.push({ from:monthKeyOf(new Date()), salary:S.salary||PHASES[PHASES.length-1].salary, days:S.days, hours:S.hours, note:"" });
-      savePhases(); renderPhase(now);
+      var t=Date.now(), mk=monthKeyOf(new Date(t)), last=PHASES[PHASES.length-1];
+      // v30.01：hours 取当前设置算出的工时（首启 S.hours 可能是 undefined，不能兜底成 8）
+      var hh=paidHours()||(last&&last.hours)||8;
+      if(last&&last.from===mk){
+        last.salary=S.salary||last.salary; last.days=S.days||last.days; last.hours=hh;
+      } else {
+        PHASES.push({ from:mk, salary:S.salary||(last?last.salary:0), days:S.days||21.75, hours:hh, note:"" });
+      }
+      PHASES=sortPhases(PHASES); savePhases(); renderPhase(t);
     });
   }
 
@@ -890,6 +998,7 @@
     applyTheme();
     renderStats(now);
     renderActual(now);
+    updateDaySummary(now);
     renderPhase(now);
     renderHistory(now);
     var _lb=document.getElementById("monthEarnLabel");
@@ -1037,7 +1146,7 @@
   }
   function stopToday(){
     if(!started()) return;
-    if(!confirm("确认下班存档？存档后今天的计时会停止，之后可以点「继续计时」恢复。")) return;
+    // v30：安静存档，不弹确认/不弹结果，页面上留一行小结（误点可点「继续计时」恢复）
     var k=todayKey(), r=todayRec(), now=Date.now();
     var r0=r.rate||todayRate();
     if(r.pauseStartMs){ r.pauses.push({s:r.pauseStartMs,e:now}); r.pauseStartMs=null; }
@@ -1045,12 +1154,12 @@
     r.rate=r0;
     r.earned=earnFrom(r.earnedMs,r0);
     r.endMs=now;
-    saveRecords(); stopFast(); render(); renderTables(); renderCalendar();
+    saveRecords(); stopFast(); render(); renderTables(); renderCalendar(); showDaySummary(k, now);
   }
   function restartToday(){
     var k=todayKey();
     if(!confirm("继续计时？会按「上班时间」重新算今天已挣的钱，之前那次存档被覆盖。")) return;
-    delete R[k]; saveRecords();
+    delete R[k]; saveRecords(); hideDaySummary();
     startTimer();
   }
 
@@ -1241,6 +1350,14 @@
       alert("导入成功：设置 + "+Object.keys(R).length+" 天记录 + "+GOALS.length+" 个目标");
     }catch(e){ alert("导入失败："+e.message); }
   });
+  var daySumEl=document.getElementById("daySummary");
+  if(daySumEl){
+    daySumEl.addEventListener("click",function(){ toggleDaySummary(); });
+    daySumEl.addEventListener("keydown",function(e){
+      if(e.key==="Enter"||e.key===" "){ e.preventDefault(); toggleDaySummary(); }
+    });
+  }
+
   document.getElementById("btnSave").addEventListener("click",function(){
     readForm(); saveSettings(); syncPhase(); document.getElementById("box").open=false;
     setErr("");

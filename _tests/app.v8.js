@@ -293,7 +293,7 @@
     box.innerHTML=list.map(function(g){
       var saved=goalSaved(g,now), amt=g.amount||0, left=Math.max(0,amt-saved);
       var pct=amt>0?Math.min(100,saved/amt*100):0, eta=goalEta(g,now);
-      var sub = amt<=0 ? "未填目标金额" : (left<=0 ? "已达成 🎉" : "还差 "+money(left)+" · 约 "+eta.days+" 个工作日"+(eta.date?"（"+eta.date.slice(5)+" 左右）":""));
+      var sub = amt<=0 ? "未填目标金额" : (left<=0 ? "已达成" : "还差 "+money(left)+" · 约 "+eta.days+" 个工作日"+(eta.date?"（"+eta.date.slice(5)+" 左右）":""));
       return '<div class="goal"><div class="gtop"><span class="gname">'+esc(g.name||"目标")+'</span>'+
         '<span class="gamt" data-edit="'+g.id+'" title="点击修改目标金额">'+money(saved)+' / '+money(amt)+(left<=0?' ✅':'')+'</span>'+
         '<button class="gdel" data-gid="'+g.id+'" title="删除">×</button></div>'+
@@ -357,7 +357,7 @@
     now=now||Date.now();
     var key=periodKeyNow(now), fe=fullEstimate(now), rec=findActual(key), html;
     if(!rec){
-      html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（'+fe.workdays+' 个工作日 × 日薪 '+money(fe.pay)+'） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
+      html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（<b>'+fe.workdays+'</b> 个完整工作日（不含今天）× 日薪 '+money(fe.pay)+' · 今天进行中，还没算进去） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-go" id="btnActFill">填入实际</button></div>';
     } else {
       var dcls=rec.diff<0?"var(--bad)":"var(--ok)";
@@ -910,15 +910,24 @@
         '<div class="bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'+
         '<span class="ssum">'+money(g.sum)+'</span></div>';
     }).join("") || '<p class="gsub">本期还没有数据。</p>';
-    box.innerHTML=html+'<p class="gsub">合计 '+money(total)+' · 本期末次更新 '+new Date(now).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+'</p>';
+    var tk0=todayKey(), r0=R[tk0]||{}, t0=r0.type, v0=dayValue(tk0,now);
+    if(!t0) t0=isWorkday(tk0)?"work":"weekend";
+    var todayIn=!(v0<=0&&t0!=="off"&&t0!=="weekend");
+    box.innerHTML=html+'<p class="gsub">合计 '+money(total)+' · '+(todayIn?"含今天进行中 1 天 · ":"")+'本期末次更新 '+new Date(now).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+'</p>';
+  }
+  // v30.06：窄屏（≤720px）图表只画最近 3 个月、0 值月份不画柱，避免 5 个 ¥0.00 堆叠
+  function narrowViewport(){
+    try{ return !!(window.matchMedia && window.matchMedia("(max-width:720px)").matches); }
+    catch(e){ return false; }
   }
   function renderHistory(now){
     var box=document.getElementById("histBody"); if(!box) return;
+    var narrow=narrowViewport(), mc=narrow?3:6;
     var cur=new Date(now), arr=[], map={};
-    for(var i=5;i>=0;i--){
+    for(var i=mc-1;i>=0;i--){
       var d=new Date(cur.getFullYear(),cur.getMonth()-i,1);
       var k=d.getFullYear()+"-"+pad(d.getMonth()+1);
-      var o={key:k,label:(d.getMonth()+1)+" 月",sum:0,days:0}; arr.push(o); map[k]=o;
+      var o={key:k,label:narrow?((d.getMonth()+1)+"月"):((d.getMonth()+1)+" 月"),sum:0,days:0}; arr.push(o); map[k]=o;
     }
     var ySum=0, yDays=0, yk=String(cur.getFullYear());
     Object.keys(R).forEach(function(k){
@@ -927,11 +936,20 @@
       if(map[mk]){ map[mk].sum+=v; map[mk].days++; }
       if(k.slice(0,4)===yk){ ySum+=v; yDays++; }
     });
-    var max=0; arr.forEach(function(a){ if(a.sum>max) max=a.sum; });
-    box.innerHTML=arr.map(function(a){
+    var title=document.getElementById("histTitle");
+    var cols=narrow?arr.filter(function(a){ return a.sum>0; }):arr;
+    if(!cols.length){
+      if(title) title.textContent="近 "+mc+" 个月";
+      box.innerHTML='<p class="gsub" style="margin:0">还没有足够数据。</p>';
+      return;
+    }
+    // v30.07：标题月数必须等于实际渲染的柱数，不能「标题说 6 个月、只画 3 根柱」
+    if(title) title.textContent=narrow?("近 "+cols.length+" 个月"):"近 6 个月";
+    var max=0; cols.forEach(function(a){ if(a.sum>max) max=a.sum; });
+    box.innerHTML=cols.map(function(a){
       var h=max>0?Math.round(a.sum/max*100):0;
       return '<div class="hcol"><div class="hbar" style="height:'+h+'%"><span>'+money(a.sum)+'</span></div>'+
-             '<div class="hlab">'+a.label+'</div><div class="hday">'+a.days+' 天</div></div>';
+             '<div class="hlab">'+a.label+'</div>'+(narrow?"":'<div class="hday">'+a.days+' 天</div>')+'</div>';
     }).join("")+
     '<p class="gsub">'+yk+' 年累计 <b>'+money(ySum)+'</b> · 出勤 '+yDays+' 天 · 日均 '+(yDays?money(ySum/yDays):money(0))+'</p>';
   }
@@ -1505,7 +1523,9 @@
     return false;
   };
   finalizeStale();
-  loadMeta(); fillForm(); ensurePhase(); render(); renderTables(); renderCalendar(); startUi();
+  loadMeta(); fillForm(); ensurePhase(); render(); renderTables(); renderCalendar();
+  try{ if(narrowViewport()){ var calBox=document.getElementById("calBox"); if(calBox) calBox.open=false; } }catch(e){}
+  startUi();
   if(started()) startFast();
   if(!(monthlyPay()>0)) openSetup();
 

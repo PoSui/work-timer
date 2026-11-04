@@ -624,8 +624,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.05", "title 是 v30.05（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.05", "brand 是 v30.05（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.07", "title 是 v30.07（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.07", "brand 是 v30.07（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -633,7 +633,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.05 \|/m.test(readmeSrc), "README 版本历史有 v30.05 行");
+ok(/^\| v30\.07 \|/m.test(readmeSrc), "README 版本历史有 v30.07 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -819,7 +819,7 @@ ok(a58f.indexOf("扣后应约") >= 0, "58f 结果里写出扣后应约金额");
 setClock("2026-11-03T15:45:00"); store = {};
 fresh27(null);
 ok(nodes["actualBody"].innerHTML.indexOf("满勤应得") >= 0, "58g 对账卡写「满勤应得」");
-ok(nodes["actualBody"].innerHTML.indexOf("个工作日 × 日薪") >= 0, "58g 对账卡给出工作日数 × 日薪的算式");
+ok(nodes["actualBody"].innerHTML.indexOf("个完整工作日（不含今天）× 日薪") >= 0, "58g 对账卡给出「完整工作日（不含今天）× 日薪」的算式");
 
 /* ===== v28 口径可追溯（三个可点数字 → 底部抽屉） ===== */
 console.log("\n=== 57. 口径抽屉（结论→算式→说明） ===");
@@ -1411,6 +1411,113 @@ console.log("\n=== 66. 删掉「空格」文字提示，快捷键仍可用 ===")
 
   /* 手机上也没有这个提示了（断点内不再有 .hint 覆盖） */
   ok(!/\.hint/.test(css66), "手机断点里也没有 .hint 残留");
+})();
+
+
+/* ===== 67 v30.06：手机端布局 + 口径一致（改前必红） ===== */
+(function(){
+  console.log("=== 67. v30.06 手机端布局与口径一致 ===");
+  var css67 = htmlSrc.slice(htmlSrc.indexOf("<style>"), htmlSrc.indexOf("</style>"));
+  var mob67 = css67.slice(css67.indexOf("@media (max-width:720px){"));
+  ok(/\.cal\s*\{[^}]*grid-template-columns:repeat\(7,\s*minmax\(0,1fr\)\)/.test(css67), "日历 7 列改 minmax(0,1fr)，不溢出右边界");
+  ok(/\.rowflex\s*\{[^}]*flex-wrap:wrap/.test(mob67) && /\.rowflex h2\{[^}]*white-space:nowrap/.test(mob67), "窄屏卡片标题 nowrap，不会竖排");
+  ok(/\.cal \.d \.e\{[^}]*text-overflow:ellipsis/.test(css67), "格子内金额省略号，不撑破格子");
+  ok(/\.f label\{[^}]*white-space:nowrap/.test(mob67), "窄屏设置项标题不折行（加班倍率）");
+
+  function narrow67(on){
+    if(on) global.window.matchMedia = function(q){ return { matches: true, media: q, addListener: function(){}, removeListener: function(){}, addEventListener: function(){}, removeEventListener: function(){} }; };
+    else delete global.window.matchMedia;
+  }
+  var B67 = { salary: 9800, days: 21.75, payDay: 1, restMode: "double", workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00", freq: 1000, theme: "light" };
+  narrow67(true);
+  setClock("2026-11-03T10:00:00");
+  setSetting(B67);
+  setRecs({ "2026-09-10": { earned: 450.57, earnedMs: 7*3600000, rate: 64.37, endMs: 1, pauses: [] } });
+  boot();
+  var hist67 = txtOf("histBody"), histRaw67 = nodes["histBody"]._html || "";
+  var bars67 = (histRaw67.match(/class="hcol"/g) || []).length;
+  ok(bars67 <= 3, "手机图表最多 3 根柱（实际 " + bars67 + " 根）");
+  ok(hist67.indexOf("¥0.00") < 0, "0 元月份不画柱、不堆 0 元金额");
+  ok(/9月/.test(hist67) && !/9 月/.test(hist67), "手机 X 轴是单行短标签「9月」");
+
+  setSetting(B67); setRecs({}); boot();
+  var empty67 = txtOf("histBody");
+  ok(empty67.indexOf("还没有足够数据") >= 0 && !/class="hcol"/.test(empty67), "数据全 0 时显示「还没有足够数据」，不画空柱");
+
+  narrow67(false);
+  setClock("2026-11-03T10:00:00");
+  setSetting(B67);
+  setRecs({ "2026-11-02": { earned: 450.57, earnedMs: 7*3600000, rate: 64.37, endMs: 1, pauses: [] } });
+  boot(); click("btnStart");
+  var stat67 = txtOf("statBody"), act67 = txtOf("actualBody");
+  var mStat = stat67.match(/正常上班\s*(\d+)\s*天/), mFull = act67.match(/(\d+)\s*个完整工作日/);
+  ok(!!mStat && !!mFull, "两处都给出天数（构成 " + (mStat ? mStat[1] : "?") + " / 满勤 " + (mFull ? mFull[1] : "?") + "）");
+  var dStat67 = mStat ? +mStat[1] : -1, dFull67 = mFull ? +mFull[1] : -2;
+  ok(dStat67 === dFull67 || dStat67 === dFull67 + 1, "构成天数与满勤工作日的差只能用「今天」解释（" + dStat67 + " vs " + dFull67 + "）");
+  ok(act67.indexOf("今天") >= 0, "满勤应得标注「不含今天 / 今天进行中」的口径");
+  ok(stat67.indexOf("今天进行中") >= 0, "本期构成标注今天进行中");
+
+  var phase67 = htmlSrc.slice(htmlSrc.indexOf('id="phaseCard"'), htmlSrc.indexOf('id="histCard"'));
+  ok(phase67.indexOf("折叠") < 0, "时薪轨迹不再挂重复的「折叠」按钮");
+  ok(/summary/.test(phase67) && /ph-t/.test(phase67), "保留 summary 的箭头与标题");
+
+  /* 9 首屏动作不埋：按钮在三小卡之前（flex order） */
+  var oBtn67=(mob67.match(/\.main>\.btns\{order:(\d+)/)||[])[1];
+  var oChip67=(mob67.match(/\.main>\.chips\{order:(\d+)/)||[])[1];
+  ok(!!oBtn67 && !!oChip67 && +oBtn67 < +oChip67, "手机首屏按钮排在三小卡之前（order "+oBtn67+" < "+oChip67+"）");
+  ok(htmlSrc.indexOf('id="btnStart"') > htmlSrc.indexOf('id="hitToday"'), "按钮 DOM 在主数字之后");
+
+  /* 10 日历卡默认折叠 + 排到对账之后 */
+  narrow67(true); setClock("2026-11-03T10:00:00"); setSetting(B67); setRecs({}); boot();
+  ok(nodes["calBox"] && nodes["calBox"].open === false, "手机端日历默认折叠");
+  var oAct67=(mob67.match(/#actualCard\{order:(\d+)/)||[])[1], oCal67=(mob67.match(/#calCard\{order:(\d+)/)||[])[1];
+  ok(!!oAct67 && !!oCal67 && +oCal67 > +oAct67, "手机端日历卡排到「月末对账」之后（"+oAct67+" → "+oCal67+"）");
+  narrow67(false);
+
+  /* 11 对账三格窄屏单列 */
+  ok(/\.act3\{flex-direction:column/.test(mob67), "手机端对账三格单列，不撑破");
+
+  /* 12 不庆祝：无 🎉 */
+  ok(APP.indexOf("🎉") < 0 && htmlSrc.indexOf("🎉") < 0, "页面/脚本里没有 🎉");
+
+  /* 13 清空按钮单独一行放最底 + 二次确认 */
+  ok(/class="danger-row"[\s\S]{0,200}id="btnClear"/.test(htmlSrc), "清空按钮单独一行放在设置最底");
+  var clearSeg67 = APP.slice(APP.indexOf('getElementById("btnClear")'), APP.indexOf('getElementById("btnClear")') + 500);
+  ok((clearSeg67.match(/confirm\(/g) || []).length >= 2, "清空数据有二次确认");
+})();
+
+
+/* ===== 68 v30.07：图表标题月数 === 实际柱数（改前必红） ===== */
+(function(){
+  console.log("=== 68. v30.07 图表标题不再撒谎 ===");
+  function narrow68(on){
+    if(on) global.window.matchMedia = function(q){ return { matches: true, media: q, addListener: function(){}, removeListener: function(){}, addEventListener: function(){}, removeEventListener: function(){} }; };
+    else delete global.window.matchMedia;
+  }
+  var B68 = { salary: 9800, days: 21.75, payDay: 1, restMode: "double", workStart: "08:30", workEnd: "18:00", breakStart: "11:30", breakEnd: "14:00", freq: 1000, theme: "light" };
+  function rec68(n){ return { earned: 450.57, earnedMs: 7*3600000, rate: 64.37, endMs: 1, pauses: [] }; }
+  function titleNum68(){ var m = txtOf("histTitle").match(/(\d+)\s*个月/); return m ? +m[1] : -1; }
+  function barNum68(){ return ((nodes["histBody"]._html || "").match(/class="hbar"/g) || []).length; }
+
+  narrow68(true);
+  setClock("2026-11-03T10:00:00"); setSetting(B68);
+  setRecs({ "2026-09-10": rec68() }); boot();
+  ok(txtOf("histTitle") === "近 1 个月", "手机只画 1 根柱时标题写「近 1 个月」（实际：" + txtOf("histTitle") + "）");
+  ok(titleNum68() === barNum68(), "标题月数 === 实际柱数（" + titleNum68() + " vs " + barNum68() + "）");
+
+  setSetting(B68); setRecs({ "2026-09-10": rec68(), "2026-10-12": rec68() }); boot();
+  ok(txtOf("histTitle") === "近 2 个月", "手机 2 根柱时标题写「近 2 个月」（实际：" + txtOf("histTitle") + "）");
+  ok(titleNum68() === barNum68(), "2 根柱时标题月数 === 柱数");
+
+  setSetting(B68); setRecs({ "2026-09-10": rec68(), "2026-10-12": rec68(), "2026-11-02": rec68() }); boot();
+  ok(txtOf("histTitle") === "近 3 个月" && barNum68() === 3, "手机 3 根柱时标题「近 3 个月」且柱数 3");
+
+  narrow68(false);
+  setSetting(B68);
+  setRecs({ "2026-06-01": rec68(), "2026-09-10": rec68(), "2026-11-02": rec68() }); boot();
+  ok(txtOf("histTitle") === "近 6 个月", "桌面标题仍是「近 6 个月」（实际：" + txtOf("histTitle") + "）");
+  ok(titleNum68() === barNum68() && barNum68() === 6, "桌面 6 根柱且标题月数 === 柱数");
+  narrow68(false);
 })();
 
 console.log("");

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v30.05</title>
+<title>牛马计时器 v30.07</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -110,14 +110,14 @@
   .act3>div{flex:1;background:#f7fafc;border:1px solid #e3edf6;border-radius:12px;padding:10px 12px}
   .act3 span{display:block;font-size:11.5px;color:#7b8794}
   .act3 b{font-size:19px;color:#1b4f7a}
-  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:6px}
+  .cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-top:6px}
   .cal .wd{font-size:11px;color:var(--dim);text-align:center;padding:2px 0}
-  .cal .d{border:1px solid #e3edf6;border-radius:10px;padding:7px 6px;min-height:56px;background:#fff}
+  .cal .d{border:1px solid #e3edf6;border-radius:10px;padding:7px 6px;min-height:56px;background:#fff;min-width:0;overflow:hidden}
   .cal .d.out{background:#f7fafd;border-color:#eef4fa}
   .cal .d{position:relative;cursor:default}
   .cal .d .tg{position:absolute;top:4px;right:6px;font-size:10px;line-height:1;color:#e0716a}
   .cal .d .tg.ban{color:#8fa3b5;font-weight:600}
-  .cal .d .fes{font-size:10px;color:#e0716a;margin-top:1px}
+  .cal .d .fes{font-size:10px;color:#e0716a;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .cal .d.weekend .n{color:#e0716a}
   .cal .d.holiday{background:#fdf4f3;border-color:#f7e0dc}
   .cal .d.holiday .n{color:#e0716a}
@@ -134,7 +134,7 @@
   .cal .d.today{border-color:#22c58b;box-shadow:0 0 0 2px rgba(34,197,139,.16)}
   .cal .d .n{font-size:12px;font-weight:600;color:#43607a}
   .cal .d.out .n{color:#c3d2df}
-  .cal .d .e{font-family:"Consolas",monospace;font-size:10.5px;color:#12a877;margin-top:3px}
+  .cal .d .e{font-family:"Consolas",monospace;font-size:10.5px;color:#12a877;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
   .cal .d .h{font-size:10px;color:#9db0c2;margin-top:1px}
   .menu{position:fixed;z-index:99;background:#fff;border:1px solid #dbe7f2;border-radius:12px;
     box-shadow:0 10px 30px rgba(20,60,100,.16);padding:6px;min-width:170px}
@@ -318,6 +318,12 @@
   body.dark .s-line{color:#c3d3e0}
   .s-note{font-size:12px;line-height:1.7;color:#7f93a6}
   body.dark .s-note{color:#8ca1b3}
+  /* v30.06 日历卡折叠：标题行与箭头同行，窄屏可收起 */
+  #calCard summary{list-style:none;cursor:pointer;display:flex;align-items:flex-start;gap:4px}
+  #calCard summary::-webkit-details-marker{display:none}
+  #calCard summary::before{content:"▸";color:#8fa3b5;font-size:11px;line-height:22px;flex:0 0 auto}
+  #calCard details[open] summary::before{content:"▾"}
+  #calCard summary .rowflex{flex:1;min-width:0;margin-bottom:6px}
   /* v29 时薪轨迹 */
   #phaseCard summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center}
   #phaseCard summary::-webkit-details-marker{display:none}
@@ -368,6 +374,47 @@
     .b-stop,.b-ghost{min-width:0;flex:1 1 auto}
     h2{font-size:15px}
     .maxh{max-height:56vh}
+    /* v30.06 A：卡片标题不竖排、标签允许换行 */
+    .rowflex{flex-wrap:wrap;align-items:flex-start;row-gap:2px}
+    .rowflex h2{white-space:nowrap;flex:0 0 auto}
+    .rowflex .tag{flex:1 1 auto;min-width:0;white-space:normal;text-align:right}
+    /* v30.06 A：日历窄屏不溢出、金额缩到 9px 并省略 */
+    .cal{gap:4px}
+    .cal .d{padding:6px 3px;min-height:52px;border-radius:8px}
+    .cal .d .n{font-size:11px}
+    .cal .d .e{font-size:9px;margin-top:2px}
+    .cal .d .fes,.cal .d .typ,.cal .d .h{font-size:9px}
+    .cal-sum{cursor:pointer}
+    /* v30.06 C：设置项标题不折行（加班倍率） */
+    .f label{white-space:nowrap}
+    /* v30.06 B：手机图表只 3 个月、不画金额标签 */
+    .histwrap{gap:6px;height:120px}
+    .histwrap .hbar span{display:none}
+    .hlab{font-size:10px;white-space:nowrap}
+    /* v30.06 11：对账三格窄屏单列，金额降一档 */
+    .act3{flex-direction:column;gap:8px}
+    .act3 b{font-size:17px}
+    /* v30.06 13：清空数据单独一行、离其它按钮更远 */
+    .danger-row{margin-top:18px;padding-top:12px;border-top:1px dashed #dbe6ef;display:flex}
+    .danger-row .b-ghost{flex:0 0 auto}
+    /* v30.06 9：首屏顺序 = 主数字 → 按钮 → 三小卡 → 进度条 */
+    .main{display:flex;flex-direction:column}
+    .main>.hit{order:1}
+    .main>.sub{order:2}
+    .main>.btns{order:3;margin-top:14px}
+    .main>.chips{order:4;margin-top:12px}
+    .main>.bar-row{order:5}
+    .main>.day-sum{order:6}
+    /* v30.06 10：日历卡排到对账之后（低频内容后置） */
+    .wrap{display:flex;flex-direction:column}
+    .wrap>.card{order:10}
+    .wrap>.card.main{order:1}
+    #goalCard{order:2}
+    #statCard{order:3}
+    #actualCard{order:4}
+    #calCard{order:5}
+    #phaseCard{order:6}
+    #histCard{order:7}
   }
 </style>
 </head>
@@ -376,7 +423,7 @@
   <div id="errBar" style="display:none"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v30.05</div>
+    <div class="brand">牛马计时器 · v30.07</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -429,10 +476,12 @@
     <div id="daySummaryMore" class="day-sum-more" style="display:none"></div>
   </div>
 
-  <div class="card">
-    <div class="rowflex"><h2>发薪周期日历</h2><span class="tag" id="calTitle"></span></div>
+  <div class="card" id="calCard">
+    <details id="calBox" open>
+    <summary class="cal-sum"><div class="rowflex"><h2>发薪周期日历</h2><span class="tag" id="calTitle"></span></div></summary>
     <div id="calWrap"></div>
     <p style="color:#9db0c2;font-size:11px;margin:10px 0 0">点本期内过去的工作日，可选：正常上班 / 上班80% / 休息 / 带薪假 / 病假 / 加班倍率。绿色边框=今天，灰底=休息日或不在本期。</p>
+    </details>
   </div>
 
   <div class="card" id="goalCard">
@@ -459,13 +508,13 @@
 
   <div class="card" id="phaseCard" style="display:none">
     <details>
-      <summary><span class="ph-t">我的时间值多少 · 时薪轨迹</span><span class="tag">折叠</span></summary>
+      <summary><span class="ph-t">我的时间值多少 · 时薪轨迹</span></summary>
       <div id="phaseBody"></div>
     </details>
   </div>
 
   <div class="card" id="histCard">
-    <div class="rowflex"><h2>近 6 个月</h2><span class="tag">按自然月</span></div>
+    <div class="rowflex"><h2 id="histTitle">近 6 个月</h2><span class="tag">按自然月</span></div>
     <div id="histBody" class="histwrap"></div>
   </div>
 
@@ -510,6 +559,8 @@
         <button class="b-ghost" id="btnDefault">恢复默认设置</button>
         <button class="b-ghost" id="btnBackup">导出备份 JSON</button>
         <button class="b-ghost" id="btnRestore">导入备份</button>
+      </div>
+      <div class="danger-row">
         <button class="b-ghost" id="btnClear" style="color:#8a4a4a">清空全部数据</button>
       </div>
       <p style="color:#5f6775;font-size:11.5px;line-height:1.8;margin:14px 0 0">
@@ -902,7 +953,7 @@
     box.innerHTML=list.map(function(g){
       var saved=goalSaved(g,now), amt=g.amount||0, left=Math.max(0,amt-saved);
       var pct=amt>0?Math.min(100,saved/amt*100):0, eta=goalEta(g,now);
-      var sub = amt<=0 ? "未填目标金额" : (left<=0 ? "已达成 🎉" : "还差 "+money(left)+" · 约 "+eta.days+" 个工作日"+(eta.date?"（"+eta.date.slice(5)+" 左右）":""));
+      var sub = amt<=0 ? "未填目标金额" : (left<=0 ? "已达成" : "还差 "+money(left)+" · 约 "+eta.days+" 个工作日"+(eta.date?"（"+eta.date.slice(5)+" 左右）":""));
       return '<div class="goal"><div class="gtop"><span class="gname">'+esc(g.name||"目标")+'</span>'+
         '<span class="gamt" data-edit="'+g.id+'" title="点击修改目标金额">'+money(saved)+' / '+money(amt)+(left<=0?' ✅':'')+'</span>'+
         '<button class="gdel" data-gid="'+g.id+'" title="删除">×</button></div>'+
@@ -966,7 +1017,7 @@
     now=now||Date.now();
     var key=periodKeyNow(now), fe=fullEstimate(now), rec=findActual(key), html;
     if(!rec){
-      html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（'+fe.workdays+' 个工作日 × 日薪 '+money(fe.pay)+'） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
+      html='<p class="gsub" style="margin:0 0 10px">本期满勤应得 <b>'+money(fe.total)+'</b>（<b>'+fe.workdays+'</b> 个完整工作日（不含今天）× 日薪 '+money(fe.pay)+' · 今天进行中，还没算进去） · 拿到工资后填一下税后到手，工具会帮你对一下差多少、差在哪。</p>'+
         '<div class="btns" style="justify-content:flex-start"><button class="b-go" id="btnActFill">填入实际</button></div>';
     } else {
       var dcls=rec.diff<0?"var(--bad)":"var(--ok)";
@@ -1519,15 +1570,24 @@
         '<div class="bar"><i style="width:'+pct.toFixed(1)+'%"></i></div>'+
         '<span class="ssum">'+money(g.sum)+'</span></div>';
     }).join("") || '<p class="gsub">本期还没有数据。</p>';
-    box.innerHTML=html+'<p class="gsub">合计 '+money(total)+' · 本期末次更新 '+new Date(now).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+'</p>';
+    var tk0=todayKey(), r0=R[tk0]||{}, t0=r0.type, v0=dayValue(tk0,now);
+    if(!t0) t0=isWorkday(tk0)?"work":"weekend";
+    var todayIn=!(v0<=0&&t0!=="off"&&t0!=="weekend");
+    box.innerHTML=html+'<p class="gsub">合计 '+money(total)+' · '+(todayIn?"含今天进行中 1 天 · ":"")+'本期末次更新 '+new Date(now).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'})+'</p>';
+  }
+  // v30.06：窄屏（≤720px）图表只画最近 3 个月、0 值月份不画柱，避免 5 个 ¥0.00 堆叠
+  function narrowViewport(){
+    try{ return !!(window.matchMedia && window.matchMedia("(max-width:720px)").matches); }
+    catch(e){ return false; }
   }
   function renderHistory(now){
     var box=document.getElementById("histBody"); if(!box) return;
+    var narrow=narrowViewport(), mc=narrow?3:6;
     var cur=new Date(now), arr=[], map={};
-    for(var i=5;i>=0;i--){
+    for(var i=mc-1;i>=0;i--){
       var d=new Date(cur.getFullYear(),cur.getMonth()-i,1);
       var k=d.getFullYear()+"-"+pad(d.getMonth()+1);
-      var o={key:k,label:(d.getMonth()+1)+" 月",sum:0,days:0}; arr.push(o); map[k]=o;
+      var o={key:k,label:narrow?((d.getMonth()+1)+"月"):((d.getMonth()+1)+" 月"),sum:0,days:0}; arr.push(o); map[k]=o;
     }
     var ySum=0, yDays=0, yk=String(cur.getFullYear());
     Object.keys(R).forEach(function(k){
@@ -1536,11 +1596,20 @@
       if(map[mk]){ map[mk].sum+=v; map[mk].days++; }
       if(k.slice(0,4)===yk){ ySum+=v; yDays++; }
     });
-    var max=0; arr.forEach(function(a){ if(a.sum>max) max=a.sum; });
-    box.innerHTML=arr.map(function(a){
+    var title=document.getElementById("histTitle");
+    var cols=narrow?arr.filter(function(a){ return a.sum>0; }):arr;
+    if(!cols.length){
+      if(title) title.textContent="近 "+mc+" 个月";
+      box.innerHTML='<p class="gsub" style="margin:0">还没有足够数据。</p>';
+      return;
+    }
+    // v30.07：标题月数必须等于实际渲染的柱数，不能「标题说 6 个月、只画 3 根柱」
+    if(title) title.textContent=narrow?("近 "+cols.length+" 个月"):"近 6 个月";
+    var max=0; cols.forEach(function(a){ if(a.sum>max) max=a.sum; });
+    box.innerHTML=cols.map(function(a){
       var h=max>0?Math.round(a.sum/max*100):0;
       return '<div class="hcol"><div class="hbar" style="height:'+h+'%"><span>'+money(a.sum)+'</span></div>'+
-             '<div class="hlab">'+a.label+'</div><div class="hday">'+a.days+' 天</div></div>';
+             '<div class="hlab">'+a.label+'</div>'+(narrow?"":'<div class="hday">'+a.days+' 天</div>')+'</div>';
     }).join("")+
     '<p class="gsub">'+yk+' 年累计 <b>'+money(ySum)+'</b> · 出勤 '+yDays+' 天 · 日均 '+(yDays?money(ySum/yDays):money(0))+'</p>';
   }
@@ -2114,7 +2183,9 @@
     return false;
   };
   finalizeStale();
-  loadMeta(); fillForm(); ensurePhase(); render(); renderTables(); renderCalendar(); startUi();
+  loadMeta(); fillForm(); ensurePhase(); render(); renderTables(); renderCalendar();
+  try{ if(narrowViewport()){ var calBox=document.getElementById("calBox"); if(calBox) calBox.open=false; } }catch(e){}
+  startUi();
   if(started()) startFast();
   if(!(monthlyPay()>0)) openSetup();
 

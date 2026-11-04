@@ -622,12 +622,13 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v28.02", "title 是 v28.02（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v28.02", "brand 是 v28.02（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v29", "title 是 v29（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v29", "brand 是 v29（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
 ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
+ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -937,6 +938,91 @@ click("btnActHist");
 click("histRow0");
 ok(JSON.stringify(actList()[0].impactSnapshot) === afterUpgrade, "升级后的快照再改月薪也不变");
 ok(nodes["resAttr"].innerHTML.indexOf("旧数据无快照") < 0, "升级后不再显示降级说明");
+
+
+/* ===== v29 时薪轨迹 ===== */
+console.log("\n=== 60. 时薪轨迹（长期视角）===");
+const KEY_PHASES = "niuma.phases.v1";
+function phases(){ return JSON.parse(store[KEY_PHASES] || "[]"); }
+function seedPhases(a){ store[KEY_PHASES] = JSON.stringify(a); }
+
+fresh27(null);
+var P0 = phases();
+ok(P0.length === 1, "首次使用自动生成 1 段初始阶段（实际 " + P0.length + "）");
+ok(/^\d{4}-(0[1-9]|1[0-2])$/.test(String((P0[0] || {}).from)), "初始阶段 from 是 YYYY-MM（实际 " + (P0[0] || {}).from + "）");
+ok(P0[0].salary === 9800 && +P0[0].days === 21.75 && +P0[0].hours === 7, "初始阶段来自当前设置（9800 / 21.75 / 7）");
+ok(htmlSrc.indexOf('id="phaseCard"') > htmlSrc.indexOf('id="actualCard"') &&
+   htmlSrc.indexOf('id="phaseCard"') < htmlSrc.indexOf('id="histCard"'),
+   "时薪轨迹卡片在「月末对账」之后、「近 6 个月」之前");
+ok(nodes["phaseCard"].style.display === "", "有阶段数据时卡片可见（折叠态由 details 控制）");
+
+/* 同月改月薪 → 覆盖最后一段；跨月 → 追加 */
+nodes["iSalary"].value = "12000";
+click("btnSave");
+ok(phases().length === 1, "同月改月薪覆盖最后一段、不新增（实际 " + phases().length + " 段）");
+ok(+phases()[0].salary === 12000, "覆盖后月薪 12000（实际 " + phases()[0].salary + "）");
+
+seedPhases([{from: "2025-01", salary: 7000, days: 21.75, hours: 8, note: "旧公司"}]);
+boot();
+nodes["iSalary"].value = "8800";
+click("btnSave");
+var P2 = phases();
+ok(P2.length === 2, "上次阶段在更早月份 → 改设置追加新阶段（实际 " + P2.length + " 段）");
+ok(+P2[1].salary === 8800 && P2[1].from !== "2025-01", "新阶段用当前月 + 新薪资");
+ok(+P2[0].salary === 7000, "旧阶段的薪资不被现在的设置改写（写入时快照化）");
+
+/* 三句人话：涨幅 / 同样 8 小时 / 分界文案 */
+seedPhases([
+  {from: "2024-01", salary: 7000, days: 21.75, hours: 8},
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 7}
+]);
+boot();
+var sent = txtOf("phaseBody");
+ok(sent.indexOf("时薪涨了 60%") >= 0, "涨幅句：涨了 60%（40.23 → 64.37）");
+ok(sent.indexOf("¥40.23") >= 0 && sent.indexOf("¥64.37") >= 0, "涨幅句带两个时薪");
+ok(sent.indexOf("同样 8 小时") >= 0 && sent.indexOf("¥321.84") >= 0 && sent.indexOf("¥514.94") >= 0,
+   "「同样 8 小时」换算正确（¥321.84 / ¥514.94）");
+ok(/<polyline/.test(nodes["phaseBody"].innerHTML) && /<circle/.test(nodes["phaseBody"].innerHTML),
+   "折线图用原生 SVG（未引图表库）");
+ok((nodes["phaseBody"].innerHTML.match(/class="ph-dot"/g) || []).length === 2, "曲线点数 = 阶段数");
+
+seedPhases([
+  {from: "2024-01", salary: 9800, days: 21.75, hours: 7},
+  {from: "2026-11", salary: 7000, days: 21.75, hours: 8}
+]);
+boot();
+var neg = txtOf("phaseBody");
+ok(neg.indexOf("时薪降了") >= 0, "负增长说「降了 X%」");
+ok(neg.indexOf("涨了 -") < 0, "不会出现「涨了 -X%」");
+
+seedPhases([
+  {from: "2024-01", salary: 9800, days: 21.75, hours: 7},
+  {from: "2026-11", salary: 9850, days: 21.75, hours: 7}
+]);
+boot();
+ok(txtOf("phaseBody").indexOf("基本没动") >= 0, "涨幅 <5% 时说「这 N 个月时薪基本没动」（产品良心）");
+
+/* 阶段编辑：立即重算，历史段可改 */
+seedPhases([
+  {from: "2024-01", salary: 7000, days: 21.75, hours: 8},
+  {from: "2026-11", salary: 9800, days: 21.75, hours: 7}
+]);
+boot();
+nodes["phSalary1"].value = "10000";
+listeners["phSalary1"].change({});
+ok(+phases()[1].salary === 10000, "编辑阶段月薪后写回 niuma.phases.v1");
+ok(txtOf("phaseBody").indexOf("¥525.45") >= 0, "编辑后「同样 8 小时」立即重算（10000/21.75/7×8=525.45）");
+ok((nodes["phaseBody"].innerHTML.match(/class="ph-dot"/g) || []).length === 2, "编辑后曲线点数仍与阶段数一致");
+
+click("btnPhaseAdd");
+ok(phases().length === 3, "点「+ 添加一段」新增阶段（实际 " + phases().length + " 段）");
+click("btnPhDel2");
+ok(phases().length === 2, "点「删」删除该阶段（实际 " + phases().length + " 段）");
+
+/* 存储 + IDB 快照 */
+ok(JSON.parse(store[KEY_PHASES] || "[]").length === 2, "阶段写入 localStorage niuma.phases.v1");
+var snapP = window.__niuma.IDB.snapshot();
+ok(Array.isArray(snapP.phases) && snapP.phases.length === 2, "IDB 快照含 phases（实际 " + (snapP.phases ? snapP.phases.length : "无") + "）");
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

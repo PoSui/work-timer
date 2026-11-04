@@ -629,8 +629,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.10", "title 是 v30.10（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.10", "brand 是 v30.10（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v31", "title 是 v31（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v31", "brand 是 v31（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -638,7 +638,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.10 \|/m.test(readmeSrc), "README 版本历史有 v30.10 行");
+ok(/^\| v31 \|/m.test(readmeSrc), "README 版本历史有 v31 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1624,6 +1624,47 @@ console.log("\n=== 66. 删掉「空格」文字提示，快捷键仍可用 ===")
   ok(!threw, "改月薪后 render 不抛错");
   ok((el._html || "").indexOf("class='dec'") >= 0, "主数字仍有 .dec 小数节点");
   ok(!!el.style.fontSize, "fitMoney 已写入内联字号（实际 " + el.style.fontSize + "）");
+})();
+
+
+/* ===== 71 v31：主数字三位小数（必要时降级两位） ===== */
+(function(){
+  console.log("=== 71. v31 主数字三位小数 ===");
+  var el = nodes["todayEarn"];
+  function mockFit(cw, k){
+    el.style.fontSize = "";
+    el.clientWidth = cw;
+    Object.defineProperty(el, "scrollWidth", { configurable: true, get: function(){
+      var f = parseFloat(el.style.fontSize) || 45;
+      var txt = (el._html || "").replace(/<[^>]+>/g, "");
+      return Math.ceil(txt.length * (k || 0.6) * f);
+    }});
+  }
+  function txt(){ return (el._html || "").replace(/<[^>]+>/g, ""); }
+  var earnedMap = {9800: 459.77, 45000: 2113.5, 999999: 45977};
+  [9800, 45000, 999999].forEach(function(sal){
+    setClock("2026-11-03T10:00:00"); setSetting({salary: sal});
+    setRecs({ "2026-11-03": { manual: true, earned: earnedMap[sal] } }); boot();
+    mockFit(300); advance(2);
+    ok(/^¥[\d,]+\.\d{3}$/.test(txt()), sal + " 主数字 3 位小数（实际 " + txt() + "）");
+    ok(el.scrollWidth <= el.clientWidth, sal + " 主数字不溢出（" + el.scrollWidth + " ≤ " + el.clientWidth + "）");
+  });
+  window.innerWidth = 360;
+  setClock("2026-11-03T10:00:00"); setSetting({salary: 45000});
+  setRecs({ "2026-11-03": { manual: true, earned: 4599.77 } }); boot();
+  mockFit(150); advance(2);
+  ok(/\.\d{2}$/.test(txt()), "窄屏 3 位放不下 → 自动降级 2 位（实际 " + txt() + "）");
+  ok(el.scrollWidth <= el.clientWidth, "降级后不溢出");
+  ok(/class='dec'>\.\d{2}</.test(el._html || ""), "降级后 .dec 小数节点完整");
+  ok(/两位/.test(String(el.getAttribute("aria-label"))), "降级时 aria-label 标「两位」且与实际一致");
+  window.innerWidth = 375;
+  mockFit(320); advance(2);
+  ok(/^¥[\d,]+\.\d{2}$/.test(txtOf("monthEarn")), "本期已赚仍是 2 位小数");
+  ok(/^¥[\d,]+\.\d{2} \/ ¥[\d,]+\.\d{2} \/ ¥[\d,]+\.\d{4}$/.test(txtOf("rateTxt")), "每秒 4 位、每分钟 2 位保持不变（" + txtOf("rateTxt") + "）");
+  ok(/\.\d{2} \/ /.test(txtOf("rateTxt")), "时薪卡首段 2 位小数");
+  mockFit(300); advance(2);
+  ok(/[三二]位/.test(String(el.getAttribute("aria-label"))) && String(el.getAttribute("title")).length > 0, "aria/title 说明当前显示精度");
+  ok(/三位/.test(String(el.getAttribute("aria-label"))), "回宽屏后 aria-label 恢复「三位」且与实际一致");
 })();
 
 console.log("");

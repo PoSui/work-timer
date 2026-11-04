@@ -4,7 +4,7 @@
 
 纯前端单文件，双击 `index.html` 就能用，不装任何东西，数据只存在你自己的浏览器里。
 
-![版本](https://img.shields.io/badge/version-v30.10-blue) ![测试](https://img.shields.io/badge/tests-448%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![版本](https://img.shields.io/badge/version-v31-blue) ![测试](https://img.shields.io/badge/tests-464%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -96,7 +96,8 @@ _tests/
 
 | 版本 | 内容 |
 |---|---|
-| v30.10 | 修手机端「今天已赚」小数被裁：主数字溢出时 `fitMoney()` 自适应降字号（72→最低 26px，JS 内联字号，不改全局 CSS）；render 后下一帧测量、resize/保存设置/小窗/深色/restart 后重测；`.money` 加 `display:inline-block;max-width:100%` 保证可测；新增第 70 组 11 条（9800/45000/999999 三档不溢出且 ≥26px、≤360px、mini、改月薪不抛错、`.dec` 仍在） |
+| v31 | 主数字 3 位小数：`#todayEarn` 显示 `¥197.048`（千分位保留），其余金额仍 2 位；`moneyHTML(v,dec)` 加参数（默认 2，主数字传 3），未改全局 `money()`；小数自动降级——3 位放不下时先压字号，触底 26px 仍溢出才退 2 位，并在 `aria-label`/`title` 标注当前精度；新增第 71 组 15 条断言（三档 3 位不溢出、窄屏降级、本期/时薪卡仍 2 位、每秒 4 位不变、精度标注） |
+| v30.10 | 修手机端「今天已赚」小数被裁：主数字溢出时 `fitMoney()` 自适应降字号（72→最低 26px，JS 内联字号，不改全局 CSS）；render 后下一帧测量、resize/保存设置/小窗/深色/restart 后重测；`.money` 加 `display:inline-block;max-width:100%` 保证可测；新增第 70 组 12 条（9800/45000/999999 三档不溢出且 ≥26px、≤360px、mini、改月薪不抛错、`.dec` 仍在） |
 | v30.09 | 自检收紧（pm P2）：「版本一致」改严格相等（title = brand = README 徽标 = 台账最新行），且 README 版本历史必须含当前版本行；`innerHTML` 从 `ok(true)` 恒绿改为真检查（`+` 拼接含变量且未 `esc/money` 即失败）；新增 `node _tests/selfcheck.js --selftest` 反证模式（临时副本改 id / 改 title 版本 / 删 README 历史行 / 塞未转义 innerHTML，必须抓到 ≥3 条），报告见 `docs/全量自检_v30.09.md` |
 | v30.08 | 收口修复（台账 P3）+ 全量自检：320px 日历金额取整不截断；窗口跨 720px 断点时防抖收起日历（回宽屏不自动展开）；时薪轨迹 X 轴按真实月份差占位；对账代扣拆社保/公积金/个税分项行；新增 `_tests/selfcheck.js` 独立自检（id 完整性/语法/CSS 括号/弹窗白名单/文案洁癖/innerHTML 注入面/四处版本一致/深色对比度/移动几何），报告见 `docs/全量自检_v30.08.md` |
 | v30.07 | 图表标题不再撒谎：`#histTitle` 按实际渲染柱数动态生成（手机「近 N 个月」，N=有数据的月份数 1–3；桌面仍「近 6 个月」），断言「标题月数 === 实际柱数」；数据全 0 时显示「还没有足够数据」且标题保持窗口月数 |

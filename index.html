@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v30.10</title>
+<title>牛马计时器 v31</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -423,7 +423,7 @@
   <div id="errBar" style="display:none"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v30.10</div>
+    <div class="brand">牛马计时器 · v31</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -684,7 +684,7 @@
   function hm2min(s){var p=(s||"00:00").split(":");return (+p[0]||0)*60+(+p[1]||0);}
   function atTime(base,hm){var m=hm2min(hm),d=new Date(base.getTime());d.setHours(Math.floor(m/60),m%60,0,0);return d;}
   function dateOfKey(k){var p=k.split("-");return new Date(+p[0],+p[1]-1,+p[2]);}
-  function moneyHTML(v){var s=(Math.max(0,v)).toFixed(2),p=s.split(".");
+  function moneyHTML(v,dec){var n=(dec===3)?3:2,s=(Math.max(0,v)).toFixed(n),p=s.split(".");
     p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,",");return "¥"+p[0]+"<span class='dec'>."+p[1]+"</span>";}
   // v30.10：主数字自适应字号——溢出时逐级缩字号，保整数与小数都完整可见（min 26px）
   function fitMoney(el){
@@ -702,14 +702,32 @@
     fs=Math.min(MAX,Math.max(MIN,fs));
     for(var i=0;i<24&&fs>MIN;i++){
       el.style.fontSize=fs+"px";
-      if(el.scrollWidth<=el.clientWidth) return;
+      if(el.scrollWidth<=el.clientWidth) return true;
       var ratio=(el.clientWidth||1)/(el.scrollWidth||1);
       var next=Math.floor(fs*ratio);
       fs=next<fs?Math.max(MIN,next):fs-1;
     }
     el.style.fontSize=fs+"px";
+    return el.scrollWidth<=el.clientWidth;
   }
-  function fitTodayMoney(){ fitMoney(document.getElementById("todayEarn")); }
+  // v31：主数字优先 3 位小数；整数位太多时先缩字号，仍放不下才降级为 2 位（其余金额仍 2 位）
+  var TODAY_DEC=3;
+  function fitTodayMoney(){
+    var el=document.getElementById("todayEarn"); if(!el) return;
+    var earn=todayEarn(Date.now());
+    TODAY_DEC=3;
+    el.innerHTML=moneyHTML(earn,3);
+    var fitted=fitMoney(el);
+    if(!fitted){
+      TODAY_DEC=2;
+      el.innerHTML=moneyHTML(earn,2);
+      fitMoney(el);
+    }
+    try{
+      el.setAttribute("aria-label","今天已赚，当前显示"+(TODAY_DEC===3?"三位":"两位")+"小数");
+      el.setAttribute("title","当前显示"+(TODAY_DEC===3?"3":"2")+"位小数");
+    }catch(e){}
+  }
   function money4(v){ return "¥"+Number(v||0).toFixed(4); }
   function money(v){return "¥"+(Math.max(0,v)).toFixed(2);}
   function esc(t){ return String(t==null?"":t).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
@@ -1660,7 +1678,8 @@
     var notStarted=!(r&&(r.startMs||r.endedMs||r.manual||r.endMs));
 
     var el=document.getElementById("todayEarn");
-    el.innerHTML=moneyHTML(earn);
+    el.innerHTML=moneyHTML(earn,3);
+    try{ el.setAttribute("aria-label","今天已赚，当前显示三位小数"); el.setAttribute("title","当前显示3位小数"); }catch(e){}
     el.classList.toggle("zero",earn<=0);
     if(window.requestAnimationFrame){ window.requestAnimationFrame(fitTodayMoney); } else { fitTodayMoney(); }
     document.title=(earn>0?money(earn)+" · 牛马计时器":"牛马计时器");

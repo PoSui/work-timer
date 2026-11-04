@@ -26,6 +26,23 @@ function readAll(dir) {
   };
 }
 
+function runHarness(dir) {
+  const hp = path.join(dir, "_tests", "harness.js");
+  if (!fs.existsSync(hp)) return null;
+  const lines = [];
+  const origLog = console.log, origExit = process.exit;
+  console.log = function () { lines.push(Array.prototype.join.call(arguments, " ")); };
+  let thrown = null;
+  process.exit = function () { const e = new Error("__harness_exit__"); e.__harness = true; throw e; };
+  try { eval(fs.readFileSync(hp, "utf8")); }
+  catch (e) { if (!e || !e.__harness) thrown = e; }
+  finally { console.log = origLog; process.exit = origExit; }
+  if (thrown) throw thrown;
+  const last = lines.filter(l => /=== 结果：通过 (\d+)，失败 (\d+) ===/.test(l)).pop() || "";
+  const m = last.match(/通过 (\d+)，失败 (\d+)/);
+  return m ? { pass: +m[1], fail: +m[2] } : null;
+}
+
 function runChecks(dir) {
   const F = readAll(dir);
   let pass = 0, fail = 0;
@@ -111,6 +128,16 @@ function runChecks(dir) {
   });
   ok(/\.cal\{display:grid;grid-template-columns:repeat\(7,minmax\(0,1fr\)\)/.test(F.html), "日历 7 列 minmax(0,1fr)，可压缩");
   ok(/\.act3\{flex-direction:column/.test(F.html), "对账三格窄屏单列");
+
+  section("=== 10. 台账/徽标数字 vs 实跑 ===");
+  const hr = runHarness(dir);
+  if (!hr) { ok(true, "跳过（副本无 harness.js，仅 --selftest 时出现）"); }
+  else {
+    const badgeN = Number(((F.readme.match(/tests-(\d+)%20passed/) || [])[1]) || 0);
+    const ledgerN = Number(((F.ledger.match(/^\| \d{4}-\d{2}-\d{2} \| v[\d.]+ \|[^|]*\|[^|]*\| (\d+) 通过/m) || [])[1]) || 0);
+    log("  harness 实跑 = " + hr.pass + " 通过 / " + hr.fail + " 失败；README 徽标 = " + badgeN + "；台账最新行 = " + ledgerN);
+    ok(hr.fail === 0 && hr.pass === badgeN && hr.pass === ledgerN, "台账数字 == README 徽标 == harness 实跑（" + hr.pass + "）");
+  }
 
   return { pass, fail };
 }

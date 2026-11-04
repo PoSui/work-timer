@@ -624,8 +624,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.03", "title 是 v30.03（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.03", "brand 是 v30.03（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.04", "title 是 v30.04（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.04", "brand 是 v30.04（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -633,7 +633,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.03 \|/m.test(readmeSrc), "README 版本历史有 v30.03 行");
+ok(/^\| v30\.04 \|/m.test(readmeSrc), "README 版本历史有 v30.04 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1307,7 +1307,7 @@ console.log("\n=== 64. 深色模式配色 ===");
     if (!v) return v;
     return v.replace(/var\(--([\w-]+)\)/g, function(_, k){ return rootTokens[k] || ("var(--" + k + ")"); });
   }
-  var lightCard = R.filter(function(r){ return r.sel.replace(/\s+/g, " ").trim() === ".card"; });
+  var lightCard = R.filter(function(r){ return r.sel.replace(/\s+/g, " ").trim() === ".card" && /background/.test(r.body); });
   var lightCardBg = lightCard.length ? /background\s*:\s*([^;]+)/.exec(lightCard[lightCard.length - 1].body) : null;
   var lightHex = lightCardBg ? hexOf(resolveRoot(lightCardBg[1].trim())) : null;
   ok(!!lightHex && lum(lightHex) > 0.7, "亮色卡片仍是浅底（实际：" + lightHex + "）");
@@ -1317,6 +1317,77 @@ console.log("\n=== 64. 深色模式配色 ===");
   ok(htmlSrc.indexOf('id="errBar" style="display:none"') >= 0 && /#errBar\{background:#ffe1e1/.test(css), "错误条颜色在 CSS 里（不在内联 style）");
   ok(/#actWarn\{margin:6px 0 0/.test(css), "对账提醒颜色在 CSS 里（不在内联 style）");
   ok(/\.state::before\{content:""/.test(css), "状态徽章有圆点（不只靠颜色区分）");
+})();
+
+
+/* ===== 65. 手机端布局（v30.04）：横向溢出 / 三栏 / 主数字 / 进度行 ===== */
+console.log("\n=== 65. 手机端布局（375px 不溢出、三栏两列、主数字不裁） ===");
+(function(){
+  var css = (htmlSrc.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || "";
+  function strip(c){ return c.replace(/\/\*[\s\S]*?\*\//g, ""); }
+  var src = strip(css);
+
+  /* 取出 max-width:720px 的媒体查询块（按大括号配对，允许里面嵌套规则） */
+  function mediaBlock(px){
+    var out = [], re = new RegExp("@media\\s*\\(max-width:\\s*" + px + "px\\)\\s*\\{", "g"), m;
+    while ((m = re.exec(src))) {
+      var i = m.index + m[0].length - 1, d = 0, j = i;
+      while (j < src.length) { if (src[j] === "{") d++; else if (src[j] === "}") { d--; if (d === 0) break; } j++; }
+      out.push(src.slice(i + 1, j));
+    }
+    return out.join("\n");
+  }
+  function decls(scope, sel){
+    var out = [], re = new RegExp("(?:^|[},])\\s*" + sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*\\{([^}]*)\\}", "g"), m;
+    while ((m = re.exec(scope))) out.push(m[1]);
+    return out.join(";");
+  }
+  var mq = mediaBlock(720);
+  ok(mq.length > 0, "存在 @media (max-width:720px) 断点");
+
+  /* 1) 手机上去掉小窗入口 */
+  var miniDecl = decls(mq, "#btnMini");
+  ok(/display\s*:\s*none/.test(miniDecl), "断点内 #btnMini 为 display:none（实际：" + (miniDecl || "无") + "）");
+
+  /* 2) 三栏断点内两列，时薪卡通栏 */
+  var chipsMq = decls(mq, ".chips") + decls(mq, ".grid3");
+  ok(/grid-template-columns\s*:\s*1fr\s+1fr/.test(chipsMq) || /grid-template-columns\s*:\s*repeat\(2,\s*1fr\)/.test(chipsMq),
+     "断点内 .chips/.grid3 变两列（实际：" + (chipsMq || "无") + "）");
+  ok(/grid-column\s*:\s*1\s*\/\s*-1/.test(decls(mq, "#chipRate")), "断点内时薪卡 grid-column:1/-1 通栏");
+  ok(/white-space\s*:\s*nowrap/.test(decls(mq, "#rateTxt")), "断点内三段时薪单行不换行");
+
+  /* 3) 主数字 clamp + nowrap，小数不裁 */
+  var moneyDecl = decls(src, ".money");
+  var cl = /font-size\s*:\s*clamp\(\s*([0-9.]+)px/.exec(moneyDecl);
+  ok(!!cl && parseFloat(cl[1]) <= 40, "主数字用 clamp 且下限 ≤ 40px（实际：" + (cl ? cl[1] + "px" : "无") + "）");
+  ok(/white-space\s*:\s*nowrap/.test(moneyDecl), "主数字 white-space:nowrap（不把小数换行）");
+
+  /* 4) 横向溢出兜底 + .wrap 盒模型 */
+  var htmlBody = decls(src, "html") + ";" + decls(src, "body");
+  ok(/overflow-x\s*:\s*hidden/.test(htmlBody), "html/body 有 overflow-x:hidden 兜底（实际：" + (htmlBody || "无") + "）");
+  ok(/max-width\s*:\s*100%/.test(htmlBody), "html/body 有 max-width:100%");
+  var wrapDecl = decls(src, ".wrap");
+  ok(/width\s*:\s*100%/.test(wrapDecl) && /box-sizing\s*:\s*border-box/.test(wrapDecl) || /box-sizing:border-box/.test(src),
+     ".wrap 宽度 100% 且 box-sizing:border-box");
+
+  /* 5) 顶部栏可换行 */
+  ok(/flex-wrap\s*:\s*wrap/.test(decls(src, ".top")), "顶部栏 flex-wrap:wrap");
+  ok(/flex-wrap\s*:\s*wrap/.test(decls(src, ".tools")), "顶部工具区 flex-wrap:wrap");
+
+  /* 6) 进度行不裁字：允许换行、baseline 对齐 */
+  var barTop = decls(src, ".bar-top");
+  ok(/align-items\s*:\s*baseline/.test(barTop), "进度行 label/数值 baseline 对齐");
+  ok(/flex-wrap\s*:\s*wrap/.test(barTop) || /white-space\s*:\s*normal/.test(barTop), "进度行窄屏允许换行不裁字");
+
+  /* 7) 没有超过视口的固定宽度 */
+  var wide = [];
+  var reW = /(?:^|[;{])\s*(?:min-)?width\s*:\s*([0-9.]+)px/g, m2;
+  while ((m2 = reW.exec(src))) { if (parseFloat(m2[1]) > 900) wide.push(m2[1] + "px"); }
+  ok(wide.length === 0, "没有 >900px 的写死宽度（实际：" + (wide.join(", ") || "无") + "）");
+
+  /* 8) 深浅两套 token 不受影响 */
+  ok(/body\.dark\{[\s\S]*?--card:#182633/.test(src), "深色 token 仍在");
+  ok(/linear-gradient\(92deg,#1f8fe0 10%,#22c58b 90%\)/.test(src), "亮色主数字渐变未被布局改动影响");
 })();
 
 console.log("");

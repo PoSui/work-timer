@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v30.03</title>
+<title>牛马计时器 v30.04</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -11,13 +11,14 @@
     --ok:#22a06b; --bad:#c0392b; --warn:#e08a12; --accent:#1f8fe0;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{max-width:100%;overflow-x:hidden}
   body{margin:0;background:radial-gradient(1200px 620px at 50% -12%,#dff1ff 0%,#f3f8fc 58%);
     color:var(--txt);font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
     display:flex;justify-content:center;padding:26px 14px 70px;min-height:100vh}
-  .wrap{width:100%;max-width:900px}
-  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
-  .tools{display:flex;align-items:center;gap:8px}
-  .brand{font-size:13px;color:var(--dim);letter-spacing:1.5px}
+  .wrap{width:100%;max-width:900px;box-sizing:border-box;padding:0}
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px}
+  .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto}
+  .brand{font-size:13px;color:var(--dim);letter-spacing:1.5px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .state{font-size:12px;padding:4px 12px;border-radius:20px;border:1px solid var(--line);
     color:var(--dim);background:#fff}
   .state.on{color:#fff;background:linear-gradient(90deg,var(--blue),var(--green));border-color:transparent;font-weight:700}
@@ -28,7 +29,7 @@
   .main::after{content:"";position:absolute;inset:auto -40% -62% -40%;height:190px;
     background:radial-gradient(50% 100% at 50% 0%,rgba(34,197,139,.16),transparent 70%);pointer-events:none}
   .label{font-size:13px;color:var(--dim);letter-spacing:1px}
-  .money{font-family:"Consolas","Menlo",monospace;font-size:clamp(46px,11vw,84px);font-weight:700;
+  .money{font-family:"Consolas","Menlo",monospace;font-size:clamp(40px,12vw,72px);font-weight:700;white-space:nowrap;
     line-height:1.05;margin:8px 0 2px;letter-spacing:-2px;font-variant-numeric:tabular-nums;
     background:linear-gradient(92deg,#1f8fe0 10%,#22c58b 90%);
     -webkit-background-clip:text;background-clip:text;color:transparent}
@@ -36,14 +37,17 @@
   .money .dec{font-size:.55em;opacity:.92}
   .sub{font-size:12px;color:var(--dim)}
   .sub b{color:#e08a12;font-weight:600}
-  .chips{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+  .chips{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:18px}
+  .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  .chip{min-width:0}
   .chip{background:var(--card2);border:1px solid var(--line);border-radius:14px;padding:12px 8px;cursor:pointer;transition:.15s}
   .chip:hover{border-color:#bfdcf5;box-shadow:0 4px 12px rgba(31,143,224,.08)}
   .chip .k{font-size:11px;color:var(--dim);margin-bottom:5px}
   .chip .v{font-family:"Consolas",monospace;font-size:19px;font-weight:700}
   .chip .v.blue{color:var(--blue)} .chip .v.gold{color:var(--gold)} .chip .v.green{color:#12a877}
   .bar-row{margin-top:16px;text-align:left}
-  .bar-top{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim);margin-bottom:6px}
+  .bar-top{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:2px 10px;font-size:11.5px;color:var(--dim);margin-bottom:6px}
+  .bar-top>span{min-width:0;overflow-wrap:anywhere}
   .bar-top b{color:var(--txt);font-weight:600}
   .bar{height:8px;background:#eaf2fa;border-radius:6px;overflow:hidden;border:1px solid #e3edf6}
   .bar > i{display:block;height:100%;width:0%;background:linear-gradient(90deg,#4aa8f0,#22c58b);transition:width .35s ease}
@@ -341,6 +345,33 @@
   #errBar{background:#ffe1e1;border:1px solid #ffb3b3;color:#a12020;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:12px;line-height:1.6}
   #actWarn{margin:6px 0 0;padding:8px 10px;border-radius:10px;background:#fff7e6;border:1px solid #ffe1a8;color:#a15c00;font-size:12.5px;line-height:1.6}
   .state::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:currentColor;margin-right:6px;vertical-align:1px;opacity:.95}
+  /* ===== v30.04 手机端布局（≤720px）：不横向溢出、三栏两列、主数字不裁 ===== */
+  @media (max-width:720px){
+    body{padding:12px 10px 60px}
+    .wrap{width:100%;padding:0}
+    .top{gap:8px}
+    .brand{font-size:12px;letter-spacing:.5px;flex:1 1 40%}
+    .tools{gap:6px}
+    #btnMini{display:none!important}
+    .card{padding:16px 14px;border-radius:16px;margin-bottom:12px}
+    .main{padding:22px 12px 18px}
+    .money{font-size:clamp(40px,12vw,72px);white-space:nowrap;letter-spacing:-1px}
+    .chips{grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}
+    .grid3{grid-template-columns:1fr 1fr}
+    #chipMonth{grid-row:1;grid-column:1}
+    #chipLeft{grid-row:1;grid-column:2}
+    #chipRate{grid-row:2;grid-column:1/-1}
+    .chip{padding:10px 8px;min-width:0}
+    #rateTxt{font-size:13px;white-space:nowrap;letter-spacing:-.3px}
+    .bar-row{margin-top:12px}
+    .bar-top{font-size:11px;gap:2px 8px}
+    .btns{margin-top:18px;gap:8px}
+    .b-go{width:100%;min-width:0}
+    .b-stop,.b-ghost{min-width:0;flex:1 1 auto}
+    .hint{font-size:11px}
+    h2{font-size:15px}
+    .maxh{max-height:56vh}
+  }
 </style>
 </head>
 <body>
@@ -348,7 +379,7 @@
   <div id="errBar" style="display:none"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v30.03</div>
+    <div class="brand">牛马计时器 · v30.04</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -364,7 +395,7 @@
     </div>
     <div class="sub" id="subLine">点「开始上班」= 今天从上班时间起补算，之后每秒自动加钱</div>
 
-    <div class="chips">
+    <div class="chips grid3">
       <div class="chip hit" id="chipMonth" role="button" tabindex="0" aria-haspopup="dialog" title="点开看本期这笔钱怎么算">
         <div class="k"><span id="monthEarnLabel">本期已赚</span><span class="qmark" aria-hidden="true">?</span></div>
         <div class="v blue" id="monthEarn">¥0.00</div>

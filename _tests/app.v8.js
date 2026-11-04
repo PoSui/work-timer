@@ -3,8 +3,8 @@
 
   /* ============ 常量与存储 ============ */
   var LS_SET="niuma.settings.v8", LS_REC="niuma.records.v8", LS_GOALS="niuma.goals.v15";
-  var DEFAULT={salary:9800,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
-    workStart:"08:30",workEnd:"18:00",breakStart:"11:30",breakEnd:"14:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
+  var DEFAULT={salary:0,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
+    workStart:"09:00",workEnd:"18:00",breakStart:"12:00",breakEnd:"13:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
 
   var S=loadSettings(), R=loadRecords();
   var GOALS=loadGoals();
@@ -908,6 +908,7 @@
     saveSettings();
     document.getElementById("setupModal").classList.remove("show");
     fillForm(); render(); renderTables();
+    if(!(monthlyPay()>0)) setErr("还没设置工资，点「开始上班」会被拦下；点「设置」填入月薪即可开始。");
   });
 
   /* ============ 启动 ============ */

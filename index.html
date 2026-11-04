@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>牛马计时器 v26.02</title>
+<title>牛马计时器 v26.03</title>
 <style>
   :root{
     --bg:#f3f8fc; --card:#ffffff; --card2:#f7fbfe; --line:#e3edf6; --txt:#203040; --dim:#7c8fa2;
@@ -190,7 +190,7 @@
   <div id="errBar" style="display:none;background:#ffe1e1;border:1px solid #ffb3b3;color:#a12020;padding:10px 14px;border-radius:10px;font-size:12.5px;margin-bottom:12px;line-height:1.6"></div>
 
   <div class="top">
-    <div class="brand">牛马计时器 · v26.02</div>
+    <div class="brand">牛马计时器 · v26.03</div>
     <div class="tools">
       <button class="mini-btn" id="btnBig" type="button">回大窗</button>
       <button class="mini-btn" id="btnMini" type="button">小窗</button>
@@ -357,8 +357,8 @@
 
   /* ============ 常量与存储 ============ */
   var LS_SET="niuma.settings.v8", LS_REC="niuma.records.v8", LS_GOALS="niuma.goals.v15";
-  var DEFAULT={salary:9800,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
-    workStart:"08:30",workEnd:"18:00",breakStart:"11:30",breakEnd:"14:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
+  var DEFAULT={salary:0,days:21.75,hours:8,payDay:15,restMode:"double",goalName:"买车首付",goalAmount:80000,goalBase:0,goalFrom:"",
+    workStart:"09:00",workEnd:"18:00",breakStart:"12:00",breakEnd:"13:00",mul:1,freq:100,remind:true,mode:"month",months:12,theme:"light"};
 
   var S=loadSettings(), R=loadRecords();
   var GOALS=loadGoals();
@@ -1262,6 +1262,7 @@
     saveSettings();
     document.getElementById("setupModal").classList.remove("show");
     fillForm(); render(); renderTables();
+    if(!(monthlyPay()>0)) setErr("还没设置工资，点「开始上班」会被拦下；点「设置」填入月薪即可开始。");
   });
 
   /* ============ 启动 ============ */

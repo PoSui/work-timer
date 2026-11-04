@@ -4,7 +4,7 @@
 
 纯前端单文件，双击 `index.html` 就能用，不装任何东西，数据只存在你自己的浏览器里。
 
-![版本](https://img.shields.io/badge/version-v26.02-blue) ![测试](https://img.shields.io/badge/tests-155%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
+![版本](https://img.shields.io/badge/version-v26.03-blue) ![测试](https://img.shields.io/badge/tests-155%20passed-brightgreen) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -94,9 +94,10 @@ _tests/
 | v23 | 近 6 个月柱状图 + 年度累计 |
 | v24 | 半天班 50%、深色主题 |
 | v25 | IndexedDB 持久层：快照双写、缓存清空后自动恢复；新增 15 条 IDB 测试 |
-| v26 | 首开修复：向导必弹 / 开始前校验 / 文案大白话；默认值改为本人常用（并入 v26 基线，不单独占版本号） |
+| v26 | 首开修复：向导必弹 / 开始前校验 / 文案大白话（默认值调整已回退，见 v26.03；不单独占版本号） |
 | v26.01 | 小窗紧凑版真正生效（解析 `?mini=1`、重写 `.mini` 样式），补「回大窗」出口 |
 | v26.02 | 版本号收口：`<title>`、`.brand`、README 版本历史统一为 v26.02（此前 title/brand 停在 v26，发版不可追溯） |
+| v26.03 | 默认值通用化：工资默认空、09:00–18:00、午休 12:00–13:00，首次打开弹向导；个人数据只存在各自浏览器，别人打开看不到别人的工资 |
 
 ---
 

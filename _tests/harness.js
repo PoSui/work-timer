@@ -96,8 +96,9 @@ console.log("\n=== 1. 首次打开 ===");
 boot();
 ok(moneyOf("todayEarn") === 0, "大数字 ¥0.00");
 ok(nodes["stateTag"].textContent === "未开始", "状态=未开始");
-ok(!nodes["setupModal"].classList.contains("show"), "默认值已预填，首次打开不弹向导");
-ok(txtOf("rateTxt").indexOf("64.37") >= 0, "首次打开时薪已按默认 9800 算：64.37");
+ok(nodes["setupModal"].classList.contains("show"), "首次打开自动弹向导（默认工资为空）");
+ok(parseFloat(nodes["iSalary"].value || "0") === 0, "设置区工资为空（实际：" + nodes["iSalary"].value + "）");
+ok(txtOf("rateTxt").indexOf("64.37") < 0, "未填工资时时薪卡片不显示 64.37");
 
 /* 2 保存设置 */
 console.log("\n=== 2. 保存设置 ===");
@@ -141,6 +142,8 @@ console.log("\n=== 7. 刷新 ===");
 boot();
 ok(nodes["stateTag"].textContent === "今天已下班", "刷新后仍已下班");
 near(moneyOf("todayEarn"), s0, 0.1, "金额保持");
+ok(!nodes["setupModal"].classList.contains("show"), "老用户（salary>0）刷新不弹向导");
+ok(String(nodes["iSalary"].value) === "9800", "设置区带出老用户自己的月薪：" + nodes["iSalary"].value);
 
 /* 8 点过去的工作日 → 标成休息 */
 console.log("=== 8. 把 11-02 标成休息 ===");
@@ -575,13 +578,27 @@ ok(!!store[KEY_SET], "本地已有设置缓存");
 boot();
 ok(nodes["setupModal"].classList.contains("show"), "salary=0 时刷新仍弹向导（不看 LS_SET 有没有）");
 
+/* 46c 先随便看看：跳过要提示，且再点开始会被拦 */
+console.log("\n=== 46c. 跳过向导的提示 ===");
+store = {}; boot();
+ok(nodes["setupModal"].classList.contains("show"), "首开弹向导");
+click("mSkip");
+ok(!nodes["setupModal"].classList.contains("show"), "点「先随便看看」可跳过向导");
+ok(nodes["errBar"].style.display === "block" && /还没设置工资/.test(nodes["errBar"].textContent), "跳过时提示条明确：" + nodes["errBar"].textContent);
+ok(/点开始会被拦|会被拦下/.test(nodes["errBar"].textContent), "提示里说明点开始会被拦下");
+click("btnStart");
+ok(nodes["setupModal"].classList.contains("show"), "跳过后再点开始：向导重新弹出");
+ok(nodes["stateTag"].textContent === "未开始", "跳过后点开始不计时");
+
 /* 47 表单 id 与 HTML 一致：fillForm 引用的 id 必须真实存在 */
 console.log("\n=== 47. 设置表单 id 完整性 ===");
 const HTML_IDS = new Set(Array.from(htmlSrc.matchAll(/\bid="([\w-]+)"/g)).map(m => m[1]));
 const FORM_IDS = ["iSalary","iMode","iMonths","iDays","iHours","iStart","iEnd","iBS","iBE","iMul","iFreq","iPayDay","iRest","iRemind","formula","box","mSalary","mDays","mStart","mEnd","mBS","mBE","mSave","mSkip","setupModal"];
 const formMissing = FORM_IDS.filter(id => !HTML_IDS.has(id));
 ok(formMissing.length === 0, "HTML 缺这些设置 id：" + (formMissing.join(", ") || "无"));
-ok(nodes["iStart"].value === "08:30", "fillForm 执行完成（上班时间默认 08:30）");
+ok(nodes["iStart"].value === "09:00", "fillForm 执行完成（上班时间默认 09:00）");
+ok(nodes["iEnd"].value === "18:00", "默认下班时间 18:00（通用 8 小时制）");
+ok(nodes["iBS"].value === "12:00" && nodes["iBE"].value === "13:00", "默认午休 12:00–13:00");
 
 
 /* 48 小窗模式（v26.01）：?mini=1 必须真的进入紧凑版 */
@@ -605,9 +622,9 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v26.02", "title 是 v26.02（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v26.02", "brand 是 v26.02（实际：" + vBrand + "）");
-ok(/^\| v26\.02 \|/m.test(readmeSrc), "README 版本历史有 v26.02 行");
+ok(vTitle === "牛马计时器 v26.03", "title 是 v26.03（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v26.03", "brand 是 v26.03（实际：" + vBrand + "）");
+ok(/^\| v26\.03 \|/m.test(readmeSrc), "README 版本历史有 v26.03 行");
 
 console.log("");
 console.log("=== 结果：通过 " + pass + "，失败 " + fail + " ===");

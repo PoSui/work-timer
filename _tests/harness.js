@@ -58,6 +58,7 @@ global.clearInterval = t => { if (t) t.alive = false; };
 let timeouts = [];
 global.setTimeout = (fn, ms) => { const t = { fn, ms: ms || 0, alive: true }; timeouts.push(t); return t; };
 global.clearTimeout = t => { if (t) t.alive = false; };
+global.requestAnimationFrame = fn => { fn(); return 0; };
 function flushTimeouts(){ const due = timeouts.splice(0); due.forEach(t => { if (t.alive) { try { t.fn(); } catch (e) {} } }); }
 global.Blob = class { constructor(parts) { blobs.push(parts.join("")); } };
 global.URL = { createObjectURL: () => "blob:x", revokeObjectURL(){} };
@@ -628,8 +629,8 @@ const vTitle = ti >= 0 ? htmlSrc.slice(ti + 7, tj).trim() : "";
 const bi = htmlSrc.indexOf('class="brand">');
 const vBrand = bi >= 0 ? htmlSrc.slice(bi + 14, htmlSrc.indexOf("<", bi)).trim() : "";
 const readmeSrc = fs.readFileSync(path.join(DIR, "..", "README.md"), "utf8");
-ok(vTitle === "牛马计时器 v30.09", "title 是 v30.08（实际：" + vTitle + "）");
-ok(vBrand === "牛马计时器 · v30.09", "brand 是 v30.08（实际：" + vBrand + "）");
+ok(vTitle === "牛马计时器 v30.10", "title 是 v30.10（实际：" + vTitle + "）");
+ok(vBrand === "牛马计时器 · v30.10", "brand 是 v30.10（实际：" + vBrand + "）");
 ok(/^\| v27 \|/m.test(readmeSrc), "README 版本历史有 v27 行");
 ok(/^\| v28 \|/m.test(readmeSrc), "README 版本历史有 v28 行");
 ok(/^\| v28\.01 \|/m.test(readmeSrc), "README 版本历史有 v28.01 行");
@@ -637,7 +638,7 @@ ok(/^\| v28\.02 \|/m.test(readmeSrc), "README 版本历史有 v28.02 行");
 ok(/^\| v29 \|/m.test(readmeSrc), "README 版本历史有 v29 行");
 ok(/^\| v30 \|/m.test(readmeSrc), "README 版本历史有 v30 行");
 ok(/^\| v30\.01 \|/m.test(readmeSrc), "README 版本历史有 v30.01 行");
-ok(/^\| v30\.09 \|/m.test(readmeSrc), "README 版本历史有 v30.09 行");
+ok(/^\| v30\.10 \|/m.test(readmeSrc), "README 版本历史有 v30.10 行");
 
 
 /* ===== v27 月末对账 ===== */
@@ -1586,6 +1587,43 @@ console.log("\n=== 66. 删掉「空格」文字提示，快捷键仍可用 ===")
   ok(/公积金[^<]*<b>−¥400\.00<\/b>/.test(attr69), "公积金单列 ¥400.00");
   ok(/个税[^<]*<b>−¥30\.00<\/b>/.test(attr69), "个税单列 ¥30.00");
   ok(/代扣合计[^<]*<b>−¥1030\.00<\/b>/.test(attr69), "代扣合计 = 600+400+30 = ¥1030.00");
+})();
+
+
+/* ===== 70 v30.10：主数字自适应字号（手机大额不裁小数） ===== */
+(function(){
+  console.log("=== 70. v30.10 主数字自适应 ===");
+  var el = nodes["todayEarn"];
+  function mockMoney(chars, cw, k){
+    el.style.fontSize = "";
+    el.clientWidth = cw;
+    Object.defineProperty(el, "scrollWidth", { configurable: true, get: function(){
+      var f = parseFloat(el.style.fontSize) || 45;
+      return Math.ceil(chars * (k || 0.62) * f);
+    }});
+  }
+  function fs(){ return parseFloat(el.style.fontSize) || 0; }
+  [ [9800, 8], [45000, 10], [999999, 11] ].forEach(function(t){
+    setClock("2026-11-03T10:00:00"); setSetting({salary: t[0]}); boot();
+    mockMoney(t[1], 210); advance(2);
+    ok(el.scrollWidth <= el.clientWidth, t[0] + " 月薪：主数字不溢出（" + el.scrollWidth + " ≤ " + el.clientWidth + "）");
+    ok(fs() >= 26, t[0] + " 月薪：字号不低于 26px（实际 " + fs() + "px）");
+  });
+  window.innerWidth = 360;
+  setClock("2026-11-03T10:00:00"); setSetting({salary: 45000}); boot();
+  mockMoney(10, 200); advance(2);
+  ok(fs() >= 26, "≤360px：字号不低于 26px（实际 " + fs() + "px）");
+  ok(el.scrollWidth <= el.clientWidth, "≤360px：主数字不溢出");
+  window.innerWidth = 375;
+  setClock("2026-11-03T10:00:00"); setSetting({salary: 999999}); boot();
+  document.body.classList.add("mini"); mockMoney(11, 200); advance(2);
+  ok(fs() >= 26 && fs() < 45, "mini 模式：字号自适应（实际 " + fs() + "px）");
+  document.body.classList.remove("mini");
+  var threw = false;
+  try { setSetting({salary: 45000}); advance(2); setSetting({salary: 9800}); advance(2); } catch(e){ threw = true; }
+  ok(!threw, "改月薪后 render 不抛错");
+  ok((el._html || "").indexOf("class='dec'") >= 0, "主数字仍有 .dec 小数节点");
+  ok(!!el.style.fontSize, "fitMoney 已写入内联字号（实际 " + el.style.fontSize + "）");
 })();
 
 console.log("");

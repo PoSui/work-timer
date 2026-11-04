@@ -26,6 +26,30 @@
   function dateOfKey(k){var p=k.split("-");return new Date(+p[0],+p[1]-1,+p[2]);}
   function moneyHTML(v){var s=(Math.max(0,v)).toFixed(2),p=s.split(".");
     p[0]=p[0].replace(/\B(?=(\d{3})+(?!\d))/g,",");return "¥"+p[0]+"<span class='dec'>."+p[1]+"</span>";}
+  // v30.10：主数字自适应字号——溢出时逐级缩字号，保整数与小数都完整可见（min 26px）
+  function fitMoney(el){
+    if(!el) return;
+    var MIN=26, MAX=72;
+    if(typeof el.clientWidth!=="number" || typeof el.scrollWidth!=="number") return;
+    el.style.fontSize="";
+    var fs=0, cs=null;
+    try{ cs=window.getComputedStyle?window.getComputedStyle(el):null; }catch(e){ cs=null; }
+    if(cs&&cs.fontSize) fs=parseFloat(cs.fontSize);
+    if(!fs){
+      var isMini=document.body&&document.body.classList&&document.body.classList.contains("mini");
+      fs=isMini?44:Math.min(MAX,Math.max(40,Math.round((window.innerWidth||375)*0.12)));
+    }
+    fs=Math.min(MAX,Math.max(MIN,fs));
+    for(var i=0;i<24&&fs>MIN;i++){
+      el.style.fontSize=fs+"px";
+      if(el.scrollWidth<=el.clientWidth) return;
+      var ratio=(el.clientWidth||1)/(el.scrollWidth||1);
+      var next=Math.floor(fs*ratio);
+      fs=next<fs?Math.max(MIN,next):fs-1;
+    }
+    el.style.fontSize=fs+"px";
+  }
+  function fitTodayMoney(){ fitMoney(document.getElementById("todayEarn")); }
   function money4(v){ return "¥"+Number(v||0).toFixed(4); }
   function money(v){return "¥"+(Math.max(0,v)).toFixed(2);}
   function esc(t){ return String(t==null?"":t).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
@@ -978,6 +1002,7 @@
     var el=document.getElementById("todayEarn");
     el.innerHTML=moneyHTML(earn);
     el.classList.toggle("zero",earn<=0);
+    if(window.requestAnimationFrame){ window.requestAnimationFrame(fitTodayMoney); } else { fitTodayMoney(); }
     document.title=(earn>0?money(earn)+" · 牛马计时器":"牛马计时器");
 
     var tag=document.getElementById("stateTag");
@@ -1345,13 +1370,13 @@
   })();
 
   document.getElementById("btnTheme").addEventListener("click",function(){
-    S.theme=(S.theme==="dark")?"light":"dark"; saveSettings(); applyTheme();
+    S.theme=(S.theme==="dark")?"light":"dark"; saveSettings(); applyTheme(); fitTodayMoney();
   });
   /* v26.01 小窗：?mini=1 时进入紧凑版，并给「回大窗」出口 */
   (function(){
     var isMini=false;
     try{ isMini=/(?:^|[?&])mini=1(?:&|$)/.test(String(location.search||"")); }catch(e){ isMini=false; }
-    if(isMini && document.body && document.body.classList){ document.body.classList.add("mini"); }
+    if(isMini && document.body && document.body.classList){ document.body.classList.add("mini"); fitTodayMoney(); }
     var b=document.getElementById("btnBig");
     if(b) b.addEventListener("click",function(){
       try{ window.close(); }catch(e){}
@@ -1546,6 +1571,7 @@
           if(nowNarrow===wasNarrow) return;
           wasNarrow=nowNarrow;
           if(nowNarrow){ var cb=document.getElementById("calBox"); if(cb) cb.open=false; }
+          fitTodayMoney();
         },200);
       });
     }
